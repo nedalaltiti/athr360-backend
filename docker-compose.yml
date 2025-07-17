@@ -1,22 +1,22 @@
 networks:
-  hrbot-network:
+  athar360-network:
     driver: bridge
-    name: hrbot-network
+    name: athar360-network
 
 volumes:
-  hrbot-data:
-    name: hrbot-data
+  athar360-data:
+    name: athar360-data
   postgres-data:
-    name: hrbot-postgres-data
-  hrbot-logs-jo:
-    name: hrbot-logs-jo
-  hrbot-logs-us:
-    name: hrbot-logs-us
+    name: athar360-postgres-data
+  athar360-logs-jo:
+    name: athar360-logs-jo
+  athar360-logs-us:
+    name: athar360-logs-us
 
 services:
   
   # Jordan (jo) Instance
-  hrbot-jo:
+  athar360-jo:
     build:
       context: .
       dockerfile: Dockerfile
@@ -24,8 +24,8 @@ services:
       args:
         APP_INSTANCE: jo
     
-    image: hrbot:jo-latest
-    container_name: hrbot-jo
+    image: athar360:jo-latest
+    container_name: athar360-jo
     restart: unless-stopped
     
     ports:
@@ -36,7 +36,7 @@ services:
     
     environment:
       - APP_INSTANCE=jo
-      - HOSTNAME=hrbot-jo
+      - HOSTNAME=athar360-jo
       - PYTHONPATH=/app/src
       - HOST=0.0.0.0
       - PORT=3978
@@ -53,8 +53,8 @@ services:
       - SKIP_DB_INIT=${SKIP_DB_INIT:-false}
     
     volumes:
-      - hrbot-data:/app/data
-      - hrbot-logs-jo:/app/logs
+      - athar360-data:/app/data
+      - athar360-logs-jo:/app/logs
     
     healthcheck:
       test: ["CMD", "python", "/app/healthcheck.py"]
@@ -77,10 +77,10 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
-        labels: "service=hrbot-jo,environment=${DEBUG:-production}"
+        labels: "service=athar360-jo,environment=${DEBUG:-production}"
     
     networks:
-      - hrbot-network
+      - athar360-network
     
     security_opt:
       - no-new-privileges:true
@@ -92,7 +92,7 @@ services:
       - default
 
   # US Instance
-  hrbot-us:
+  athar360-us:
     build:
       context: .
       dockerfile: Dockerfile
@@ -100,8 +100,8 @@ services:
       args:
         APP_INSTANCE: us
     
-    image: hrbot:us-latest
-    container_name: hrbot-us
+    image: athar360:us-latest
+    container_name: athar360-us
     restart: unless-stopped
     
     ports:
@@ -112,7 +112,7 @@ services:
     
     environment:
       - APP_INSTANCE=us
-      - HOSTNAME=hrbot-us
+      - HOSTNAME=athar360-us
       - PYTHONPATH=/app/src
       - HOST=0.0.0.0
       - PORT=3979
@@ -128,8 +128,8 @@ services:
       - SKIP_DB_INIT=${SKIP_DB_INIT:-false}
     
     volumes:
-      - hrbot-data:/app/data
-      - hrbot-logs-us:/app/logs
+      - athar360-data:/app/data
+      - athar360-logs-us:/app/logs
     
     healthcheck:
       test: ["CMD", "python", "/app/healthcheck.py"]
@@ -152,10 +152,10 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
-        labels: "service=hrbot-us,environment=${DEBUG:-production}"
+        labels: "service=athar360-us,environment=${DEBUG:-production}"
     
     networks:
-      - hrbot-network
+      - athar360-network
     
     security_opt:
       - no-new-privileges:true
@@ -168,7 +168,7 @@ services:
   # Nginx Reverse Proxy (optional)
   nginx:
     image: nginx:alpine
-    container_name: hrbot-nginx
+    container_name: athar360-nginx
     restart: unless-stopped
     
     ports:
@@ -179,11 +179,11 @@ services:
       - ./docker/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
     
     depends_on:
-      - hrbot-jo
-      - hrbot-us
+      - athar360-jo
+      - athar360-us
     
     networks:
-      - hrbot-network
+      - athar360-network
     
     profiles:
       - multi-app

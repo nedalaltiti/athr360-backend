@@ -13,7 +13,7 @@ from pathlib import Path
 # Add the parent directory to Python path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from src.hrbot.config.app_config import get_instance_manager
+from src.athr360.config.app_config import get_instance_manager
 
 def check_embeddings_for_instance(instance_name: str):
     """Check if embeddings exist for the given instance."""

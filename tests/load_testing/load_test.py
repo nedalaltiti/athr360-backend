@@ -50,7 +50,7 @@ class LoadTestSummary:
     errors: Dict[str, int]
 
 
-class HRBotLoadTester:
+class Athr360LoadTester:
     """Load tester for HR Bot API with streaming support."""
     
     def __init__(self, base_url: str = "http://localhost:3978"):
@@ -303,7 +303,7 @@ async def run_full_load_test_suite(base_url: str, output_file: str = None):
     
     results = {}
     
-    async with HRBotLoadTester(base_url) as tester:
+    async with Athr360LoadTester(base_url) as tester:
         # Health check first
         print("🏥 Performing health check...")
         if not await tester.health_check():
@@ -371,7 +371,7 @@ if __name__ == "__main__":
     if args.requests:
         # Single test mode
         async def single_test():
-            async with HRBotLoadTester(args.url) as tester:
+            async with Athr360LoadTester(args.url) as tester:
                 if await tester.health_check():
                     summary = await tester.run_load_test(args.requests)
                     print(f"Results: {summary.successful_requests}/{summary.total_requests} successful")

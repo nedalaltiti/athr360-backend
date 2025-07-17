@@ -23,9 +23,9 @@ async def load_embeddings(instance: str):
     print("="*60)
     
     # Import after setting environment
-    from src.hrbot.utils.di import get_vector_store
-    from src.hrbot.infrastructure.ingest import refresh_vector_index
-    from src.hrbot.config.app_config import get_current_app_config
+    from src.athr360.utils.di import get_vector_store
+    from src.athr360.infrastructure.ingest import refresh_vector_index
+    from src.athr360.config.app_config import get_current_app_config
     
     # Get app config
     app_config = get_current_app_config()
@@ -95,7 +95,7 @@ def main():
         # Set environment before importing
         os.environ['APP_INSTANCE'] = args.instance
         
-        from src.hrbot.utils.di import get_vector_store
+        from src.athr360.utils.di import get_vector_store
         print(f"\n⚠️  Clearing existing embeddings for {args.instance}...")
         vector_store = get_vector_store()
         asyncio.run(vector_store.clear())

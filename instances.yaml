@@ -1,21 +1,23 @@
 instances:
   jo:
-    name: "Jo HR Assistant"
+    name: "ATHAR360 Compliance PDPL Assistant"
     supports_noi: true
     hr_support_url: "https://hrsupport.usclarity.com/support/home"
     hostname_patterns:
       - "hr-chatbot-jo-*"
       - "*-jo-*"
     default: true
+    description: "Supports dynamic language detection - responds in Arabic for Arabic queries, English for English queries"
 
   us:
-    name: "US HR Assistant" 
+    name: "ATHAR360 Compliance PDPL Assistant" 
     supports_noi: false
     hr_support_url: "https://hrsupport.usclarity.com/support/home"
     hostname_patterns:
       - "hr-chatbot-us-*"
       - "*-us-*"
     default: false
+    description: "Supports dynamic language detection - responds in Arabic for Arabic queries, English for English queries"
 
   # Example: Adding new regions is just configuration
   # DR:

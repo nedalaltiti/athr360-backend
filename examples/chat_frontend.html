@@ -1,0 +1,572 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ATHAR360 Compliance PDPL - Frontend Example</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background-color: #f5f5f5;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .chat-container {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+            width: 100%;
+            max-width: 600px;
+            height: 80vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .chat-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            text-align: center;
+            position: relative;
+        }
+
+        .chat-header h1 {
+            font-size: 1.5em;
+            margin-bottom: 5px;
+        }
+
+        .chat-header p {
+            opacity: 0.9;
+            font-size: 0.9em;
+        }
+
+        .status-indicator {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #4CAF50;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.2); opacity: 0.7; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+
+        .chat-messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .message {
+            max-width: 80%;
+            padding: 12px 16px;
+            border-radius: 18px;
+            word-wrap: break-word;
+            animation: fadeIn 0.3s ease-in;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .message.user {
+            background: #007bff;
+            color: white;
+            align-self: flex-end;
+            border-bottom-right-radius: 6px;
+        }
+
+        .message.bot {
+            background: #f8f9fa;
+            color: #333;
+            align-self: flex-start;
+            border-bottom-left-radius: 6px;
+            border: 1px solid #e9ecef;
+        }
+
+        .message.bot.streaming {
+            background: #e3f2fd;
+            border-color: #bbdefb;
+        }
+
+        .typing-indicator {
+            display: none;
+            align-self: flex-start;
+            padding: 12px 16px;
+            background: #f8f9fa;
+            border-radius: 18px;
+            border-bottom-left-radius: 6px;
+            border: 1px solid #e9ecef;
+            max-width: 80px;
+        }
+
+        .typing-indicator.active {
+            display: block;
+        }
+
+        .typing-dots {
+            display: flex;
+            gap: 4px;
+        }
+
+        .typing-dots span {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #999;
+            animation: bounce 1.4s infinite ease-in-out;
+        }
+
+        .typing-dots span:nth-child(1) { animation-delay: -0.32s; }
+        .typing-dots span:nth-child(2) { animation-delay: -0.16s; }
+
+        @keyframes bounce {
+            0%, 80%, 100% { transform: scale(0.8); opacity: 0.5; }
+            40% { transform: scale(1); opacity: 1; }
+        }
+
+        .chat-input {
+            padding: 20px;
+            background: white;
+            border-top: 1px solid #e9ecef;
+            display: flex;
+            gap: 10px;
+        }
+
+        .input-group {
+            display: flex;
+            flex: 1;
+            gap: 10px;
+        }
+
+        #messageInput {
+            flex: 1;
+            padding: 12px 16px;
+            border: 2px solid #e9ecef;
+            border-radius: 25px;
+            font-size: 14px;
+            outline: none;
+            transition: border-color 0.3s;
+        }
+
+        #messageInput:focus {
+            border-color: #007bff;
+        }
+
+        .btn {
+            padding: 12px 20px;
+            border: none;
+            border-radius: 25px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s;
+            outline: none;
+        }
+
+        .btn-primary {
+            background: #007bff;
+            color: white;
+        }
+
+        .btn-primary:hover:not(:disabled) {
+            background: #0056b3;
+            transform: translateY(-1px);
+        }
+
+        .btn-secondary {
+            background: #6c757d;
+            color: white;
+        }
+
+        .btn-secondary:hover:not(:disabled) {
+            background: #545b62;
+        }
+
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .controls {
+            display: flex;
+            gap: 10px;
+            margin-top: 10px;
+        }
+
+        .toggle-container {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 14px;
+            color: #666;
+        }
+
+        .toggle {
+            position: relative;
+            width: 44px;
+            height: 24px;
+            background: #ccc;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+
+        .toggle.active {
+            background: #007bff;
+        }
+
+        .toggle::before {
+            content: '';
+            position: absolute;
+            top: 2px;
+            left: 2px;
+            width: 20px;
+            height: 20px;
+            background: white;
+            border-radius: 50%;
+            transition: transform 0.3s;
+        }
+
+        .toggle.active::before {
+            transform: translateX(20px);
+        }
+
+        .session-info {
+            font-size: 12px;
+            color: #666;
+            text-align: center;
+            padding: 10px;
+            background: #f8f9fa;
+            border-top: 1px solid #e9ecef;
+        }
+
+        .error {
+            color: #dc3545;
+            background: #f8d7da;
+            border: 1px solid #f5c6cb;
+            padding: 10px;
+            border-radius: 6px;
+            margin: 10px 0;
+            font-size: 14px;
+        }
+
+        @media (max-width: 768px) {
+            .chat-container {
+                height: 100vh;
+                border-radius: 0;
+                max-width: 100%;
+            }
+            
+            .controls {
+                flex-direction: column;
+                gap: 5px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="chat-container">
+        <div class="chat-header">
+            <div class="status-indicator" id="statusIndicator"></div>
+            <h1>ATHAR360 Compliance PDPL</h1>
+            <p>Ask me anything about compliance, policies, procedures, and PDPL regulations in KSA</p>
+        </div>
+
+        <div class="chat-messages" id="chatMessages">
+            <div class="message bot">
+                👋 Hello! I'm your ATHAR360 Compliance PDPL Assistant. I can help you with compliance policies, procedures, PDPL regulations, and answer any compliance-related questions you might have.<br><br>
+                <strong>🌐 Language Support:</strong> I can respond in both Arabic and English. Just type your question in your preferred language and I'll respond accordingly!<br><br>
+                How can I assist you today?
+            </div>
+        </div>
+
+        <div class="typing-indicator" id="typingIndicator">
+            <div class="typing-dots">
+                <span></span>
+                <span></span>
+                <span></span>
+            </div>
+        </div>
+
+        <div class="chat-input">
+            <div class="input-group">
+                <input type="text" id="messageInput" placeholder="Type your message..." autocomplete="off">
+                <button class="btn btn-primary" id="sendButton">Send</button>
+            </div>
+        </div>
+
+        <div class="controls">
+            <div class="toggle-container">
+                <span>Streaming:</span>
+                <div class="toggle active" id="streamingToggle"></div>
+            </div>
+            <button class="btn btn-secondary" id="clearButton">Clear Chat</button>
+        </div>
+
+        <div class="session-info" id="sessionInfo">
+            Session: Not connected
+        </div>
+    </div>
+
+    <script>
+        class ChatBot {
+            constructor() {
+                this.apiUrl = 'http://localhost:8000/api';
+                this.userId = 'web_user_' + Date.now();
+                this.sessionId = null;
+                this.streamingEnabled = true;
+                this.isProcessing = false;
+                
+                this.initElements();
+                this.initEventListeners();
+                this.updateSessionInfo();
+            }
+
+            initElements() {
+                this.chatMessages = document.getElementById('chatMessages');
+                this.messageInput = document.getElementById('messageInput');
+                this.sendButton = document.getElementById('sendButton');
+                this.clearButton = document.getElementById('clearButton');
+                this.streamingToggle = document.getElementById('streamingToggle');
+                this.typingIndicator = document.getElementById('typingIndicator');
+                this.sessionInfo = document.getElementById('sessionInfo');
+                this.statusIndicator = document.getElementById('statusIndicator');
+            }
+
+            initEventListeners() {
+                this.sendButton.addEventListener('click', () => this.sendMessage());
+                this.messageInput.addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        this.sendMessage();
+                    }
+                });
+                this.clearButton.addEventListener('click', () => this.clearChat());
+                this.streamingToggle.addEventListener('click', () => this.toggleStreaming());
+            }
+
+            toggleStreaming() {
+                this.streamingEnabled = !this.streamingEnabled;
+                this.streamingToggle.classList.toggle('active', this.streamingEnabled);
+            }
+
+            async sendMessage() {
+                const message = this.messageInput.value.trim();
+                if (!message || this.isProcessing) return;
+
+                this.isProcessing = true;
+                this.updateUI(true);
+
+                // Add user message
+                this.addMessage(message, 'user');
+                this.messageInput.value = '';
+
+                try {
+                    if (this.streamingEnabled) {
+                        await this.sendStreamingMessage(message);
+                    } else {
+                        await this.sendRegularMessage(message);
+                    }
+                } catch (error) {
+                    this.handleError('Failed to send message: ' + error.message);
+                } finally {
+                    this.isProcessing = false;
+                    this.updateUI(false);
+                }
+            }
+
+            async sendRegularMessage(message) {
+                this.showTyping(true);
+
+                const response = await fetch(`${this.apiUrl}/chat`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        message: message,
+                        user_id: this.userId,
+                        session_id: this.sessionId,
+                        streaming: false
+                    })
+                });
+
+                this.showTyping(false);
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+
+                const data = await response.json();
+                this.sessionId = data.session_id;
+                this.addMessage(data.response, 'bot');
+                this.updateSessionInfo();
+            }
+
+            async sendStreamingMessage(message) {
+                this.showTyping(true);
+
+                const response = await fetch(`${this.apiUrl}/chat/stream`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        message: message,
+                        user_id: this.userId,
+                        session_id: this.sessionId,
+                        streaming: true
+                    })
+                });
+
+                this.showTyping(false);
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                let botMessageElement = null;
+
+                try {
+                    while (true) {
+                        const { done, value } = await reader.read();
+                        if (done) break;
+
+                        const chunk = decoder.decode(value, { stream: true });
+                        const lines = chunk.split('\n');
+
+                        for (const line of lines) {
+                            if (line.startsWith('data: ')) {
+                                const data = JSON.parse(line.substring(6));
+                                
+                                if (data.content) {
+                                    if (!botMessageElement) {
+                                        botMessageElement = this.addMessage('', 'bot', true);
+                                    }
+                                    botMessageElement.textContent += data.content;
+                                    this.scrollToBottom();
+                                }
+
+                                if (data.is_final) {
+                                    if (botMessageElement) {
+                                        botMessageElement.classList.remove('streaming');
+                                    }
+                                    this.sessionId = data.session_id;
+                                    this.updateSessionInfo();
+                                    return;
+                                }
+                            }
+                        }
+                    }
+                } finally {
+                    reader.releaseLock();
+                }
+            }
+
+            addMessage(content, sender, isStreaming = false) {
+                const messageElement = document.createElement('div');
+                messageElement.className = `message ${sender}`;
+                if (isStreaming) {
+                    messageElement.classList.add('streaming');
+                }
+                messageElement.textContent = content;
+                
+                this.chatMessages.appendChild(messageElement);
+                this.scrollToBottom();
+                
+                return messageElement;
+            }
+
+            showTyping(show) {
+                this.typingIndicator.classList.toggle('active', show);
+                if (show) {
+                    this.scrollToBottom();
+                }
+            }
+
+            scrollToBottom() {
+                this.chatMessages.scrollTop = this.chatMessages.scrollHeight;
+            }
+
+            updateUI(processing) {
+                this.sendButton.disabled = processing;
+                this.messageInput.disabled = processing;
+                this.clearButton.disabled = processing;
+                
+                if (processing) {
+                    this.sendButton.textContent = 'Sending...';
+                } else {
+                    this.sendButton.textContent = 'Send';
+                }
+            }
+
+            async clearChat() {
+                try {
+                    if (this.sessionId) {
+                        await fetch(`${this.apiUrl}/chat/session/${this.userId}`, {
+                            method: 'DELETE'
+                        });
+                    }
+                    
+                    // Clear chat messages except welcome message
+                    const messages = this.chatMessages.querySelectorAll('.message');
+                    messages.forEach((msg, index) => {
+                        if (index > 0) { // Keep the first welcome message
+                            msg.remove();
+                        }
+                    });
+                    
+                    this.sessionId = null;
+                    this.updateSessionInfo();
+                } catch (error) {
+                    this.handleError('Failed to clear chat: ' + error.message);
+                }
+            }
+
+            updateSessionInfo() {
+                if (this.sessionId) {
+                    this.sessionInfo.textContent = `Session: ${this.sessionId.substring(0, 8)}...`;
+                } else {
+                    this.sessionInfo.textContent = 'Session: Not connected';
+                }
+            }
+
+            handleError(message) {
+                const errorElement = document.createElement('div');
+                errorElement.className = 'error';
+                errorElement.textContent = message;
+                this.chatMessages.appendChild(errorElement);
+                this.scrollToBottom();
+            }
+        }
+
+        // Initialize the chatbot when the page loads
+        document.addEventListener('DOMContentLoaded', () => {
+            new ChatBot();
+        });
+    </script>
+</body>
+</html> 

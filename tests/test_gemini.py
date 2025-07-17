@@ -14,8 +14,8 @@ current_dir = Path(__file__).parent
 src_dir = current_dir / "src"
 sys.path.append(str(src_dir))
 
-from hrbot.services.gemini_service import GeminiService
-from hrbot.services.processor import ChatProcessor
+from athr360.services.gemini_service import GeminiService
+from athr360.services.processor import ChatProcessor
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, 

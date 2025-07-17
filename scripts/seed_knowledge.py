@@ -23,9 +23,9 @@ import mimetypes
 # Add the parent directory to the Python path for imports
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from src.hrbot.core.chunking import process_document
-from src.hrbot.infrastructure.vector_store import VectorStore
-from src.hrbot.utils.error import DocumentError, ErrorCode
+from src.athr360.core.chunking import process_document
+from src.athr360.infrastructure.vector_store import VectorStore
+from src.athr360.utils.error import DocumentError, ErrorCode
 
 # Configure logging
 logging.basicConfig(
@@ -251,7 +251,7 @@ async def main():
     )
     parser.add_argument(
         "--collection-name",
-        default="hr_documents",
+        default="athar360_documents",
         help="Name of the vector store collection"
     )
     parser.add_argument(
