@@ -25,7 +25,7 @@ pipelines:
             
             # ✅ Test AWS Secrets Manager access
             - echo "Testing AWS Secrets Manager access..."
-            - aws secretsmanager get-secret-value --secret-id chatbot-clarity-db-dev-postgres --region us-west-1 --query 'SecretString' --output text > /dev/null
+            - aws secretsmanager get-secret-value --secret-id chatbot-db-dev-postgres --region us-west-1 --query 'SecretString' --output text > /dev/null
             - echo "✅ AWS Secrets Manager access confirmed"
             
             # Build and push Docker image

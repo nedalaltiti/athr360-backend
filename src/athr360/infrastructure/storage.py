@@ -1,5 +1,5 @@
 """
-Storage interface and implementations for the HR bot application.
+Storage interface and implementations for the compliance bot application.
 
 This module provides:
 1. Abstract storage interface for data persistence

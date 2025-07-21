@@ -18,15 +18,345 @@ import re
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+import base64
+import json
+import tempfile
 
 import aiofiles  # Add this import for async file operations
 import pdfplumber
+import httpx
+from google.oauth2 import service_account
+from google.auth.transport.requests import Request
 
 from athr360.config.settings import settings
 from athr360.config.app_config import get_current_app_config, get_instance_manager
 from athr360.core.document import Document
 from athr360.infrastructure.vector_store import VectorStore
 from athr360.utils.di import get_vector_store  # Import the app-aware version
+
+# Add language detection import at the top of the file
+import re
+from datetime import datetime
+from pathlib import Path
+from typing import Any, Dict, List, Optional
+
+import aiofiles  # Add this import for async file operations
+import pdfplumber
+
+# Add language detection function
+def _detect_language(text: str) -> str:
+    """
+    Detect language of text content using heuristic approach.
+    
+    Args:
+        text: Input text to analyze
+        
+    Returns:
+        Language code: 'ar' for Arabic, 'en' for English
+    """
+    if not text or not text.strip():
+        return 'unknown'
+    
+    # Clean text for analysis
+    clean_text = re.sub(r'[^\w\s]', '', text).strip()
+    
+    # Count Arabic characters
+    arabic_chars = len(re.findall(r'[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]', clean_text))
+    
+    # Count English characters
+    english_chars = len(re.findall(r'[A-Za-z]', clean_text))
+    
+    # Total meaningful characters
+    total_chars = arabic_chars + english_chars
+    
+    if total_chars == 0:
+        return 'unknown'
+    
+    # Calculate percentages
+    arabic_percentage = arabic_chars / total_chars
+    english_percentage = english_chars / total_chars
+    
+    # Determine language based on majority
+    if arabic_percentage > 0.6:
+        return 'ar'
+    elif english_percentage > 0.6:
+        return 'en'
+    elif arabic_percentage > english_percentage:
+        return 'ar'
+    else:
+        return 'en'
+
+def _is_arabic_text(text: str) -> bool:
+    """Check if text contains Arabic characters."""
+    if not text:
+        return False
+    # More comprehensive Arabic character detection
+    arabic_pattern = r'[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]'
+    return bool(re.search(arabic_pattern, text))
+
+def _extract_text_pdf(path: str) -> str:
+    """
+    Advanced PDF extraction with improved Arabic text handling.
+    
+    Enhanced for multilingual documents:
+    - Proper Arabic/RTL text extraction
+    - Preserves text direction and formatting
+    - Handles mixed language documents
+    """
+    with pdfplumber.open(path) as pdf:
+        extracted_content = []
+        
+        for page_num, page in enumerate(pdf.pages, 1):
+            page_content = []
+            page_content.append(f"=== PAGE {page_num} ===")
+            
+            # Extract tables first (they contain structured information)
+            tables = page.extract_tables()
+            if tables:
+                page_content.append("\n--- TABLES ---")
+                for table_idx, table in enumerate(tables, 1):
+                    if table and len(table) > 0:
+                        page_content.append(f"\nTable {table_idx}:")
+                        # Convert table to structured text
+                        formatted_table = _format_table_for_text(table)
+                        page_content.append(formatted_table)
+            
+            # Extract regular text with improved Arabic handling
+            try:
+                # Try layout-preserved extraction first
+                text_content = page.extract_text(layout=True, x_tolerance=3, y_tolerance=3)
+                if text_content:
+                    # Enhanced text structure that handles Arabic properly
+                    structured_text = _enhance_text_structure_multilingual(text_content)
+                    if structured_text.strip():
+                        page_content.append("\n--- CONTENT ---")
+                        page_content.append(structured_text)
+                
+                # Fallback extraction with different settings for better Arabic support
+                if not text_content or len(text_content.strip()) < 50:
+                    # Try without layout preservation for corrupted layouts
+                    fallback_text = page.extract_text(layout=False, x_tolerance=1, y_tolerance=1)
+                    if fallback_text and fallback_text != text_content:
+                        additional_content = _extract_additional_content_multilingual(fallback_text, str(page_content))
+                        if additional_content:
+                            page_content.append("\n--- ADDITIONAL ---")
+                            page_content.append(additional_content)
+                            
+            except Exception as e:
+                logger.warning(f"PDF text extraction error on page {page_num}: {e}")
+                # Final fallback - try basic extraction
+                try:
+                    basic_text = page.extract_text()
+                    if basic_text:
+                        page_content.append("\n--- BASIC EXTRACTION ---")
+                        page_content.append(_clean_extracted_text(basic_text))
+                except Exception as e2:
+                    logger.error(f"All PDF extraction methods failed on page {page_num}: {e2}")
+            
+            extracted_content.append("\n".join(page_content))
+    
+    return "\n\n".join(extracted_content)
+
+async def _extract_text_pdf_mistral_ocr(path: str) -> str:
+    """
+    Extract text from PDF using Mistral OCR API for enhanced Arabic text extraction.
+    
+    Args:
+        path: Path to the PDF file
+        
+    Returns:
+        Extracted text with proper Arabic encoding
+    """
+    if not settings.mistral_ocr.enabled:
+        logger.debug("Mistral OCR is disabled, falling back to standard extraction")
+        return _extract_text_pdf(path)
+    
+    if not settings.mistral_ocr.service_account_json:
+        logger.warning("Mistral OCR service account JSON not configured, falling back to standard extraction")
+        return _extract_text_pdf(path)
+    
+    try:
+        logger.info(f"Using Mistral OCR for PDF extraction: {path}")
+        
+        # Create credentials from service account JSON
+        service_account_info = json.loads(settings.mistral_ocr.service_account_json)
+        credentials = service_account.Credentials.from_service_account_info(
+            service_account_info,
+            scopes=["https://www.googleapis.com/auth/cloud-platform"]
+        )
+        
+        # Refresh credentials to get access token
+        credentials.refresh(Request())
+        
+        # Build endpoint URL
+        base_url = f"https://{settings.mistral_ocr.region}-aiplatform.googleapis.com/v1"
+        endpoint_url = f"{base_url}/projects/{settings.mistral_ocr.project_id}/locations/{settings.mistral_ocr.region}/publishers/mistralai/models/{settings.mistral_ocr.model_name}-{settings.mistral_ocr.model_version}:rawPredict"
+        
+        # Encode PDF to base64
+        with open(path, 'rb') as pdf_file:
+            pdf_content = pdf_file.read()
+            encoded_pdf = base64.b64encode(pdf_content).decode('utf-8')
+        
+        # Prepare request
+        headers = {
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+            "Authorization": f"Bearer {credentials.token}"
+        }
+        
+        payload = {
+            "model": f"{settings.mistral_ocr.model_name}-{settings.mistral_ocr.model_version}",
+            "document": {
+                "type": "document_url",
+                "document_url": f"data:application/pdf;base64,{encoded_pdf}",
+            },
+        }
+        
+        # Make OCR request
+        logger.debug(f"Making Mistral OCR request to: {endpoint_url}")
+        async with httpx.AsyncClient(timeout=settings.mistral_ocr.timeout_seconds) as client:
+            response = await client.post(url=endpoint_url, headers=headers, json=payload)
+            response.raise_for_status()
+            
+            if response.status_code == 200:
+                ocr_result = response.json()
+                
+                # Extract text from all pages
+                extracted_content = []
+                if "pages" in ocr_result:
+                    for page_idx, page_data in enumerate(ocr_result["pages"]):
+                        page_content = [f"=== PAGE {page_idx + 1} ==="]
+                        
+                        # Get markdown content if available
+                        if "markdown" in page_data:
+                            markdown_content = page_data["markdown"].strip()
+                            if markdown_content:
+                                page_content.append(markdown_content)
+                        
+                        # Get plain text if available
+                        elif "text" in page_data:
+                            text_content = page_data["text"].strip()
+                            if text_content:
+                                page_content.append(text_content)
+                        
+                        if len(page_content) > 1:  # More than just the page header
+                            extracted_content.append("\n".join(page_content))
+                
+                result_text = "\n\n".join(extracted_content)
+                logger.info(f"Mistral OCR extraction successful: {len(result_text)} characters extracted from {len(ocr_result.get('pages', []))} pages")
+                return result_text
+            else:
+                logger.warning(f"Mistral OCR request failed with status {response.status_code}")
+                return _extract_text_pdf(path)  # Fallback
+                
+    except json.JSONDecodeError as e:
+        logger.error(f"Invalid service account JSON configuration: {e}")
+        return _extract_text_pdf(path)  # Fallback
+    except httpx.HTTPError as e:
+        logger.error(f"Mistral OCR HTTP error: {e}")
+        return _extract_text_pdf(path)  # Fallback
+    except Exception as e:
+        logger.error(f"Mistral OCR extraction failed: {e}")
+        return _extract_text_pdf(path)  # Fallback
+
+def _clean_extracted_text(text: str) -> str:
+    """Clean extracted text while preserving Arabic characters."""
+    if not text:
+        return ""
+    
+    # Remove excessive whitespace while preserving Arabic spacing
+    text = re.sub(r'[ \t]+', ' ', text)  # Replace multiple spaces/tabs with single space
+    text = re.sub(r'\n\s*\n', '\n\n', text)  # Replace multiple newlines with double newline
+    
+    # Fix common PDF extraction issues
+    text = re.sub(r'([a-zA-Z])\s+([a-zA-Z])', r'\1\2', text)  # Fix broken English words
+    
+    # Don't mess with Arabic text spacing as it might break the text
+    return text.strip()
+
+def _enhance_text_structure_multilingual(text: str) -> str:
+    """
+    Enhanced text structure processing that properly handles Arabic and RTL text.
+    
+    Improvements:
+    - Preserves Arabic text formatting
+    - Handles RTL text direction
+    - Doesn't apply English-specific formatting rules to Arabic text
+    """
+    if not text:
+        return ""
+    
+    lines = text.split('\n')
+    enhanced_lines = []
+    
+    for line in lines:
+        line = line.strip()
+        if not line:
+            continue
+        
+        # Check if line contains Arabic text
+        has_arabic = _is_arabic_text(line)
+        
+        if has_arabic:
+            # For Arabic text, minimal processing to preserve original formatting
+            enhanced_lines.append(line)
+        else:
+            # Apply English text enhancements
+            # Detect and enhance list items
+            if re.match(r'^[•·▪▫‣⁃]\s*', line):
+                # Already a bullet point
+                enhanced_lines.append(line)
+            elif re.match(r'^\d+\.\s+', line):
+                # Numbered list
+                enhanced_lines.append(line)
+            elif re.match(r'^[a-zA-Z]\.\s+', line):
+                # Lettered list
+                enhanced_lines.append(line)
+            elif re.match(r'^-\s+', line):
+                # Dash list - convert to bullet
+                enhanced_lines.append(line.replace('-', '•', 1))
+            else:
+                # Regular text processing for English content
+                if len(line) < 200 and ':' in line and not line.endswith('.'):
+                    # Might be a definition or category
+                    enhanced_lines.append(line)
+                elif re.match(r'^[A-Z][^.!?]*[^.!?]\s*$', line) and len(line) < 100:
+                    # Might be a heading or category (all caps, no sentence ending)
+                    enhanced_lines.append(f"**{line}**")
+                else:
+                    enhanced_lines.append(line)
+    
+    return '\n'.join(enhanced_lines)
+
+def _extract_additional_content_multilingual(fallback_text: str, existing_content: str) -> str:
+    """Extract additional content with multilingual support."""
+    if not fallback_text:
+        return ""
+    
+    # For Arabic text, use different sentence splitting
+    if _is_arabic_text(fallback_text):
+        # Arabic sentence splitting - be more conservative
+        sentences = re.split(r'[.!?؟۔]\s+', fallback_text)
+    else:
+        # English sentence splitting
+        sentences = re.split(r'[.!?]+', fallback_text)
+    
+    new_content = []
+    
+    for sentence in sentences:
+        sentence = sentence.strip()
+        if len(sentence) > 10 and sentence not in existing_content:
+            # Check if it looks like meaningful content
+            if _is_arabic_text(sentence):
+                # For Arabic, add if it's substantial content
+                if len(sentence) > 20:
+                    new_content.append(sentence)
+            else:
+                # English content filtering
+                if re.search(r'\b(policy|procedure|benefit|discount|employee|contact|phone|email|address)\b', sentence.lower()):
+                    new_content.append(sentence)
+    
+    return '. '.join(new_content) + '.' if new_content else ""
 
 logger = logging.getLogger(__name__)
 
@@ -56,56 +386,6 @@ async def _run_blocking(fn, *args):
     return await loop.run_in_executor(None, fn, *args)
 
 
-def _extract_text_pdf(path: str) -> str:
-    """
-    Advanced PDF extraction with table, list, and structure preservation.
-    
-    Follows AI/ML best practices for document processing:
-    - Multi-modal extraction (text + tables + structure)
-    - Content type detection and preservation
-    - Fallback strategies for complex layouts
-    """
-    with pdfplumber.open(path) as pdf:
-        extracted_content = []
-        
-        for page_num, page in enumerate(pdf.pages, 1):
-            page_content = []
-            page_content.append(f"=== PAGE {page_num} ===")
-            
-            # Extract tables first (they contain structured information)
-            tables = page.extract_tables()
-            if tables:
-                page_content.append("\n--- TABLES ---")
-                for table_idx, table in enumerate(tables, 1):
-                    if table and len(table) > 0:
-                        page_content.append(f"\nTable {table_idx}:")
-                        # Convert table to structured text
-                        formatted_table = _format_table_for_text(table)
-                        page_content.append(formatted_table)
-            
-            # Extract regular text (excluding table areas to avoid duplication)
-            # Get text with layout preserved
-            text_content = page.extract_text(layout=True, x_tolerance=2, y_tolerance=2)
-            if text_content:
-                # Clean and structure the text
-                structured_text = _enhance_text_structure(text_content)
-                if structured_text.strip():
-                    page_content.append("\n--- CONTENT ---")
-                    page_content.append(structured_text)
-            
-            # Try to extract any missed content with different settings
-            fallback_text = page.extract_text(layout=False)
-            if fallback_text and fallback_text not in str(page_content):
-                additional_content = _extract_additional_content(fallback_text, str(page_content))
-                if additional_content:
-                    page_content.append("\n--- ADDITIONAL ---")
-                    page_content.append(additional_content)
-            
-            extracted_content.append("\n".join(page_content))
-    
-    return "\n\n".join(extracted_content)
-
-
 def _format_table_for_text(table: List[List[str]]) -> str:
     """Convert extracted table to well-formatted text that preserves structure."""
     if not table or len(table) == 0:
@@ -131,65 +411,6 @@ def _format_table_for_text(table: List[List[str]]) -> str:
                 formatted_rows.append("| " + " | ".join(clean_row) + " |")
     
     return "\n".join(formatted_rows)
-
-
-def _enhance_text_structure(text: str) -> str:
-    """Enhance text structure to preserve lists, headings, and formatting."""
-    if not text:
-        return ""
-    
-    lines = text.split('\n')
-    enhanced_lines = []
-    
-    for line in lines:
-        line = line.strip()
-        if not line:
-            continue
-            
-        # Detect and enhance list items
-        if re.match(r'^[•·▪▫‣⁃]\s*', line):
-            # Already a bullet point
-            enhanced_lines.append(line)
-        elif re.match(r'^\d+\.\s+', line):
-            # Numbered list
-            enhanced_lines.append(line)
-        elif re.match(r'^[a-zA-Z]\.\s+', line):
-            # Lettered list
-            enhanced_lines.append(line)
-        elif re.match(r'^-\s+', line):
-            # Dash list - convert to bullet
-            enhanced_lines.append(line.replace('-', '•', 1))
-        else:
-            # Regular text - check if it looks like a list item
-            if len(line) < 200 and ':' in line and not line.endswith('.'):
-                # Might be a definition or category
-                enhanced_lines.append(line)
-            elif re.match(r'^[A-Z][^.!?]*[^.!?]\s*$', line) and len(line) < 100:
-                # Might be a heading or category (all caps, no sentence ending)
-                enhanced_lines.append(f"**{line}**")
-            else:
-                enhanced_lines.append(line)
-    
-    return '\n'.join(enhanced_lines)
-
-
-def _extract_additional_content(fallback_text: str, existing_content: str) -> str:
-    """Extract any content missed by the primary extraction methods."""
-    if not fallback_text:
-        return ""
-    
-    # Split into sentences and check what's new
-    fallback_sentences = re.split(r'[.!?]+', fallback_text)
-    new_content = []
-    
-    for sentence in fallback_sentences:
-        sentence = sentence.strip()
-        if len(sentence) > 10 and sentence not in existing_content:
-            # Check if it looks like meaningful content
-            if re.search(r'\b(policy|procedure|benefit|discount|employee|contact|phone|email|address)\b', sentence.lower()):
-                new_content.append(sentence)
-    
-    return '. '.join(new_content) + '.' if new_content else ""
 
 
 def _extract_text_docx(path: str) -> str:
@@ -241,10 +462,26 @@ def _extract_text_txt(path: str) -> str:
         with open(path, encoding="latin-1") as f:
             return f.read()
 
+async def _extract_text_pdf_router(path: str) -> str:
+    """
+    Route PDF extraction to Mistral OCR or standard extraction based on configuration.
+    
+    Args:
+        path: Path to the PDF file
+        
+    Returns:
+        Extracted text using the best available method
+    """
+    if settings.mistral_ocr.enabled and settings.mistral_ocr.service_account_json:
+        # Use Mistral OCR for better Arabic support
+        return await _extract_text_pdf_mistral_ocr(path)
+    else:
+        # Use standard pdfplumber extraction
+        return _extract_text_pdf(path)
 
-# Updated EXTRACTORS with async support
+# Updated EXTRACTORS with async support and Mistral OCR for Arabic PDF extraction
 EXTRACTORS = {
-    ".pdf": _extract_text_pdf,  # PDF still needs blocking due to pdfplumber
+    ".pdf": _extract_text_pdf_router,  # Smart routing: Mistral OCR or standard extraction
     ".docx": _extract_text_docx,
     ".txt": _extract_text_txt_async,  # Now async!
     ".md": _extract_text_txt_async,   # Now async!
@@ -252,7 +489,7 @@ EXTRACTORS = {
 }
 
 ASYNC_EXTRACTORS = {
-    ".txt", ".md", ".csv"  # These support async extraction
+    ".txt", ".md", ".csv", ".pdf"  # These support async extraction
 }
 
 SUPPORTED_EXT = set(EXTRACTORS.keys())  # For backward compatibility
@@ -290,6 +527,20 @@ async def process_document(path: str, cfg: ChunkingConfig | None = None) -> List
 
     # Use faster hashing for large documents
     doc_hash = hashlib.md5(text.encode()).hexdigest()
+    
+    # Detect document language
+    detected_language = _detect_language(text)
+    
+    # Determine language from file path if available
+    path_language = None
+    if '/english/' in str(p) or '/en/' in str(p):
+        path_language = 'en'
+    elif '/arabic/' in str(p) or '/ar/' in str(p):
+        path_language = 'ar'
+    
+    # Use path-based language if available, otherwise use detected language
+    final_language = path_language or detected_language
+    
     meta_base: Dict[str, Any] = {
         "source": p.name,
         "file_path": str(p),
@@ -298,6 +549,9 @@ async def process_document(path: str, cfg: ChunkingConfig | None = None) -> List
         "doc_hash": doc_hash,
         "char_count": len(text),
         "word_count": len(text.split()),
+        "language": final_language,
+        "detected_language": detected_language,
+        "path_language": path_language,
     }
 
     chunks = _chunk(text, meta_base, cfg)
@@ -542,9 +796,12 @@ def _chunk_text_intelligently(text: str, meta: Dict[str, Any],
             # Look for sentence boundaries
             sentence_ends = [m.end() for m in re.finditer(r'[.!?]+\s+', text[start:end + 100])]
             if sentence_ends:
-                best_end = start + max(s for s in sentence_ends if s <= chunk_size)
-                if best_end > start + chunk_size * 0.7:  # Don't make chunks too small
-                    end = best_end
+                # Filter sentence ends that are within the current chunk
+                valid_sentence_ends = [s for s in sentence_ends if s <= (end - start)]
+                if valid_sentence_ends:
+                    best_end = start + max(valid_sentence_ends)
+                    if best_end > start + (chunk_size * 0.7):  # Don't make chunks too small
+                        end = best_end
         
         chunk_text = text[start:end].strip()
         if chunk_text:

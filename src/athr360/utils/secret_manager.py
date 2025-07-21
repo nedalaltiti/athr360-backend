@@ -84,7 +84,7 @@ def get_database_credentials(
         Dictionary with database connection parameters
     """
     # Get secret name from environment variable
-    secret_name = secret_name or os.environ.get("AWS_DB_SECRET_NAME", "chatbot-clarity-db-dev-postgres")
+    secret_name = secret_name or os.environ.get("AWS_DB_SECRET_NAME", "chatbot-db-dev-postgres")
     
     # Enhanced debugging
     logger.info(f"=== DATABASE CREDENTIALS DEBUG ===")

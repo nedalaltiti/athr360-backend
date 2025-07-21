@@ -50,7 +50,7 @@ FROM python:3.11-slim AS runtime
 
 
 # Runtime arguments
-ARG APP_USER=hrbot
+ARG APP_USER=athr360
 ARG APP_UID=1000
 ARG APP_GID=1000
 ARG APP_INSTANCE=jo
@@ -135,13 +135,13 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
 ENTRYPOINT ["/usr/bin/tini", "--", "./docker-entrypoint.sh"]
 
 # Default will be overridden by entrypoint script
-CMD ["python", "-m", "uvicorn", "hrbot.api.app:app"]
+CMD ["python", "-m", "uvicorn", "athr360.api.app:app"]
 
 # Metadata labels
 LABEL maintainer="Nedal Al-titi <nedal.altiti@live.com>" \
-      description="HR Teams Bot with Gemini AI and RAG capabilities" \
+      description="AI Compliance Assistant with Gemini AI and RAG capabilities" \
       version="2.0.0" \
-      org.opencontainers.image.title="HR Teams Bot" \
-      org.opencontainers.image.description="Multi-region HR Assistant with AI capabilities" \
-      org.opencontainers.image.vendor="US Clarity" \
+      org.opencontainers.image.title="AI Compliance Assistance" \
+      org.opencontainers.image.description="Compliance Assistant with AI capabilities" \
+      org.opencontainers.image.vendor="exequt" \
       org.opencontainers.image.licenses="Proprietary"

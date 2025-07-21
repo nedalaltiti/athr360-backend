@@ -1,5 +1,5 @@
 """
-Admin router for managing the HR Teams Bot.
+Admin router for managing the compliance Bot.
 
 This module provides endpoints for:
 1. Document management (upload, list, delete)
@@ -219,7 +219,7 @@ async def test_rag(query: dict):
     try:
         # Import here to avoid circular imports
         from athr360.core.rag.engine import RAG
-        from athr360.core.rag_adapter import LLMServiceAdapter
+        from athr360.core.adapters.llm_gemini import LLMServiceAdapter
         from athr360.services.gemini_service import GeminiService
 
         llm_adapter = LLMServiceAdapter(GeminiService())

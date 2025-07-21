@@ -4,9 +4,9 @@ instances:
     hostname_patterns:
       - "athr360-compliance-*"
       - "*-compliance-*"
-    default: true
+    default: true # this is the default instance
     description: "Unified AI compliance assistant - handles both Arabic and English documents with dynamic language detection"
 
 global_settings:
   data_base_dir: "data"
-  auto_create_directories: true 
+  auto_create_directories: true

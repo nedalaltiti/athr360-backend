@@ -91,7 +91,7 @@ Previous conversation context:
 CRITICAL RULES FOR CLASSIFICATION:
 
 **CONTINUE if the user is:**
-- Asking a new question (even single words like "noi", "benefits", "policy")
+- Asking a new question (even single words like "benefits", "policy")
 - Mentioning any Compliance PDPL topic, company process, or work-related matter
 - Expressing concerns, problems, or seeking help (including sensitive topics)
 - Saying anything that could be a topic, abbreviation, or request
@@ -105,7 +105,7 @@ CRITICAL RULES FOR CLASSIFICATION:
 - Simply says "no" or "nope" in response to "Is there anything else I can help you with?"
 
 **NEVER END for:**
-- Single words that could be topics/questions (noi, benefits, policy, etc.)
+- Single words that could be topics/questions (benefits, policy, etc.)
 - Expressions of frustration, resignation, or personal struggles
 - Anything that could be interpreted as seeking help or information
 - Ambiguous responses (except for "no" or "nope" as a direct response)

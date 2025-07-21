@@ -68,7 +68,6 @@ async def diagnostic():
     env_vars = {
         "GOOGLE_APPLICATION_CREDENTIALS": os.environ.get("GOOGLE_APPLICATION_CREDENTIALS", "Not set"),
         "GOOGLE_CLOUD_PROJECT": os.environ.get("GOOGLE_CLOUD_PROJECT", "Not set"),
-        "TEAMS_APP_ID_CONFIGURED": bool(settings.teams.app_id),
         "GEMINI_MODEL": settings.gemini.model_name,
         "DATABASE_CONFIGURED": bool(settings.db.url)
     }

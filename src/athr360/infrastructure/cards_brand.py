@@ -3,7 +3,7 @@ BRAND = {
     "accent":  "#46B2FF",   # Sky
     "bg":      "#F6F9FC",   # Off-white
     # Replace with real hosted logo URL
-    "logo_url": "https://media.licdn.com/dms/image/v2/D4E0BAQEGjhiqYFMfew/company-logo_200_200/company-logo_200_200/0/1722803877919/wuduh_logo?e=1753315200&v=beta&t=XPwYpKBCeW0kwIYG-wdKDbLoNYEx8eIcOZdCHCYfURc",
+    "logo_url": "https://media.licdn.com/dms/image/v2/D4D0BAQGiRp9sIsRXnw/company-logo_200_200/B4DZT7uLUwHIAM-/0/1739389975206/exequt_logo?e=1755734400&v=beta&t=SRixnNVLVa0J6611RK0Q3j62hQNX0gTE1AO2hTq5qX0",
 }
 
 

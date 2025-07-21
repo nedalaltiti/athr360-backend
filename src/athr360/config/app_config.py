@@ -1,5 +1,5 @@
 """
-Multi-App Configuration for HR Bot - CI/CD Friendly & Scalable.
+Multi-App Configuration for Compliance Bot - CI/CD Friendly & Scalable.
 
 This module manages configuration for multiple app registrations within the same Azure AD tenant.
 New instances can be added simply by updating the configuration file - no code changes required.
@@ -40,8 +40,6 @@ class AppConfig:
     knowledge_base_dir: Path
     embeddings_dir: Path
     prompt_dir: Path
-    hr_support_url: str
-    supports_noi: bool = False
     hostname_patterns: List[str] = None
     default_instance: bool = False
 
@@ -81,19 +79,10 @@ class AppInstanceManager:
         """Create a default instances.yaml file."""
         default_config = {
             'instances': {
-                'jo': {
-                    'name': 'Jo HR Assistant',
-                    'supports_noi': True,
-                    'hr_support_url': 'https://hrsupport.usclarity.com/support/home',
-                    'hostname_patterns': ['hr-chatbot-jo-*', '*-jo-*'],
+                'athr360': {
+                    'name': 'athr360 Assistant',
+                    'hostname_patterns': ['athr360-compliance-*', '*-compliance-*'],
                     'default': True
-                },
-                'us': {
-                    'name': 'US HR Assistant', 
-                    'supports_noi': False,
-                    'hr_support_url': 'https://hrsupport.usclarity.com/support/home',
-                    'hostname_patterns': ['hr-chatbot-us-*', '*-us-*'],
-                    'default': False
                 }
             },
             'global_settings': {
@@ -130,12 +119,10 @@ class AppInstanceManager:
             # Create AppConfig
             app_config = AppConfig(
                 instance_id=instance_id,
-                name=instance_data.get('name', f'{instance_id.title()} HR Assistant'),
+                name=instance_data.get('name', f'{instance_id.title()} Compliance Assistant'),
                 knowledge_base_dir=knowledge_dir,
                 embeddings_dir=embeddings_dir,
                 prompt_dir=prompt_dir,
-                hr_support_url=instance_data.get('hr_support_url', 'https://hrsupport.usclarity.com/support/home'),
-                supports_noi=instance_data.get('supports_noi', False),
                 hostname_patterns=instance_data.get('hostname_patterns', []),
                 default_instance=instance_data.get('default', False)
             )
@@ -161,38 +148,23 @@ class AppInstanceManager:
         logger.warning("Using fallback configuration")
         
         self._instances = {
-            'jo': AppConfig(
-                instance_id='jo',
-                name='Jo HR Assistant',
-                knowledge_base_dir=Path('data/knowledge/jo'),
-                embeddings_dir=Path('data/embeddings/jo'),
-                prompt_dir=Path('data/prompts/jo'),
-                hr_support_url='https://hrsupport.usclarity.com/support/home',
-                supports_noi=True,
-                hostname_patterns=['hr-chatbot-jo-*', '*-jo-*'],
+            'athr360': AppConfig(
+                instance_id='athr360',
+                name='athr360 Assistant',
+                knowledge_base_dir=Path('data/knowledge/compliance'),
+                embeddings_dir=Path('data/embeddings/compliance'),
+                prompt_dir=Path('data/prompts/compliance'),
+                hostname_patterns=['athr360-compliance-*', '*-compliance-*'],
                 default_instance=True
-            ),
-            'us': AppConfig(
-                instance_id='us',
-                name='US HR Assistant',
-                knowledge_base_dir=Path('data/knowledge/us'),
-                embeddings_dir=Path('data/embeddings/us'),
-                prompt_dir=Path('data/prompts/us'),
-                hr_support_url='https://hrsupport.usclarity.com/support/home',
-                supports_noi=False,
-                hostname_patterns=['hr-chatbot-us-*', '*-us-*'],
-                default_instance=False
             )
         }
         
         self._hostname_patterns = {
-            'hr-chatbot-jo-*': 'jo',
-            '*-jo-*': 'jo',
-            'hr-chatbot-us-*': 'us',
-            '*-us-*': 'us'
+            'athr360-compliance-*': 'athr360',
+            '*-compliance-*': 'athr360'
         }
         
-        self._default_instance = 'jo'
+        self._default_instance = 'compliance'
     
     def get_instance(self, instance_id: str) -> Optional[AppConfig]:
         """Get instance configuration by ID."""
@@ -231,19 +203,16 @@ class AppInstanceManager:
         for pattern, instance_id in self._hostname_patterns.items():
             # Convert glob pattern to simple check
             if pattern.startswith('*') and pattern.endswith('*'):
-                # *-jo-* -> check if '-jo-' in hostname
                 check = pattern[1:-1]
                 if check in hostname:
                     logger.info(f"Matched pattern '{pattern}' -> instance '{instance_id}'")
                     return instance_id
             elif pattern.startswith('*'):
-                # *-jo -> check if hostname ends with '-jo'
                 check = pattern[1:]
                 if hostname.endswith(check):
                     logger.info(f"Matched pattern '{pattern}' -> instance '{instance_id}'")
                     return instance_id
             elif pattern.endswith('*'):
-                # hr-chatbot-jo-* -> check if hostname starts with 'hr-chatbot-jo-'
                 check = pattern[:-1]
                 if hostname.startswith(check):
                     logger.info(f"Matched pattern '{pattern}' -> instance '{instance_id}'")
@@ -259,7 +228,7 @@ class AppInstanceManager:
     
     def get_default_instance(self) -> str:
         """Get the default instance ID."""
-        return self._default_instance or 'jo'
+        return self._default_instance or 'compliance'
 
 
 # Global instance manager
@@ -349,12 +318,7 @@ def is_feature_enabled(feature_name: str) -> bool:
     """
     app_config = get_current_app_config()
     
-    if feature_name.lower() == "noi":
-        return app_config.supports_noi
-    
-    # Add other features here as needed
-    logger.warning(f"Unknown feature: {feature_name}")
-    return False
+    return True
 
 
 def set_hostname_for_testing(hostname: str) -> None:

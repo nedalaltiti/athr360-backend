@@ -17,13 +17,13 @@ from src.athr360.config.app_config import get_instance_manager
 
 def check_embeddings_for_instance(instance_name: str):
     """Check if embeddings exist for the given instance."""
-    print(f"\n=== Checking embeddings for {instance_name} ===")
+    print(f"\nChecking embeddings for {instance_name}")
     
     manager = get_instance_manager()
     config = manager.get_instance(instance_name)
     
     if not config:
-        print(f"❌ Invalid instance: {instance_name}")
+        print(f"Invalid instance: {instance_name}")
         print(f"Available instances: {list(manager.get_all_instances().keys())}")
         return
     

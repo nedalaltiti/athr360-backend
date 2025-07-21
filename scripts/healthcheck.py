@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Docker healthcheck script for HR Teams Bot
+Docker healthcheck script for compliance Bot
 
 This script performs a health check by making a request to the /health endpoint
 and validates that the application is responding correctly.

@@ -1,20 +1,19 @@
 """
-Retrieval-Augmented Generation (RAG) core implementation.
+Permissive-First RAG Engine with Language-Aware Search
 """
-
 from __future__ import annotations
-
+import asyncio
 import logging
 import re
-import asyncio
 from dataclasses import dataclass
-from typing import (Any, AsyncGenerator, Dict, List, Optional, Protocol, Set,
-                    Tuple)
+from typing import Any, AsyncGenerator, Dict, List, Optional, Protocol, Set, Tuple
 
-from athr360.core.rag.prompt_loader import build_prompt, get_base_system, get_flow_rules, get_template
+# from athr360.core.adapters.base import LLMProvider  # Import handled in original file
+from athr360.core.rag.prompt_loader import build_prompt, get_template, get_base_system, get_flow_rules
 from athr360.infrastructure.vector_store import VectorStore
-from athr360.utils.error import ErrorCode, RAGError
-from athr360.utils.result import Error, Result, Success
+from athr360.services.language_router import LanguageAwareQueryRouter, detect_query_language_simple
+from athr360.utils.error import RAGError, ErrorCode
+from athr360.utils.result import Result, Success, Error
 from athr360.config.settings import settings
 
 logger = logging.getLogger(__name__)
@@ -41,11 +40,11 @@ class RetrievedChunk:
 
 class RAG:
     """
-    Permissive-First RAG pipeline following best practices:
-    - Send all queries to vector DB first
-    - Use intent for ranking/boosting, not blocking
-    - Multiple search strategies for comprehensive coverage
-    - Graceful degradation for low-confidence results
+    Enhanced RAG pipeline with language-aware search capabilities:
+    - Auto-detects query language
+    - Routes to appropriate language documents
+    - Fallback mechanisms for comprehensive coverage
+    - Multiple search strategies for optimal results
     """
 
     def __init__(
@@ -54,13 +53,22 @@ class RAG:
         vector_store: Optional[VectorStore] = None,
         llm_provider: Optional[LLMProvider] = None,
         prompt_template: Optional[str] = None,
-        top_k: int = 8,  # Reduced for more focused responses
+        top_k: int = 8,
+        enable_language_routing: bool = True,  # NEW: Enable smart language routing
     ) -> None:
         self.vector_store = vector_store or VectorStore()
         self.llm_provider = llm_provider
         self.prompt_template = prompt_template 
         self.default_top_k = top_k
-        logger.info("RAG engine initialized with permissive-first approach (top_k=%s)", top_k)
+        
+        # Initialize language-aware routing
+        self.enable_language_routing = enable_language_routing
+        if enable_language_routing:
+            self.language_router = LanguageAwareQueryRouter(self.vector_store)
+            logger.info("RAG engine initialized with language-aware search capabilities")
+        else:
+            self.language_router = None
+            logger.info("RAG engine initialized with standard search (language routing disabled)")
 
     async def query(
         self,
@@ -70,11 +78,21 @@ class RAG:
         chat_history: Optional[List[str]] = None,
         top_k: Optional[int] = None,
         system_override: Optional[str] = None,
+        force_language: Optional[str] = None,  # NEW: Force specific language
+        enable_cross_language: bool = False,   # NEW: Allow cross-language results
     ) -> Result[Dict[str, Any]]:
-        """Permissive-first RAG: Always retrieve, then intelligently rank and present."""
+        """Enhanced RAG with language-aware search."""
         try:
             k = top_k or self.default_top_k
-            chunks = await self._retrieve_with_multi_strategy(user_query, k)
+            
+            # Use language-aware retrieval if enabled
+            if self.enable_language_routing and self.language_router:
+                chunks = await self._retrieve_with_language_awareness(
+                    user_query, k, force_language, enable_cross_language
+                )
+            else:
+                # Fallback to standard multi-strategy retrieval
+                chunks = await self._retrieve_with_multi_strategy(user_query, k)
             
             # Apply intelligent ranking based on query intent
             ranked_chunks = self._apply_intent_aware_ranking(user_query, chunks)
@@ -104,6 +122,13 @@ class RAG:
             payload["sources"] = self._extract_sources(ranked_chunks)
             payload["used_rag"] = True
             payload["confidence_level"] = self._assess_confidence(ranked_chunks)
+            
+            # Add language information
+            if self.enable_language_routing:
+                detected_lang = detect_query_language_simple(user_query)
+                payload["query_language"] = detected_lang
+                payload["language_routing_enabled"] = True
+            
             if user_id:
                 payload["user_id"] = user_id
             return Success(payload)
@@ -125,10 +150,20 @@ class RAG:
         chat_history: Optional[List[str]] = None,
         top_k: Optional[int] = None,
         system_override: Optional[str] = None,
+        force_language: Optional[str] = None,
+        enable_cross_language: bool = False,
     ) -> AsyncGenerator[str, None]:
-        """Streaming version with optimized retrieval."""
+        """Streaming version with language-aware search."""
         k = top_k or self.default_top_k
-        chunks = await self._retrieve_with_multi_strategy(user_query, k)
+        
+        # Use language-aware retrieval if enabled
+        if self.enable_language_routing and self.language_router:
+            chunks = await self._retrieve_with_language_awareness(
+                user_query, k, force_language, enable_cross_language
+            )
+        else:
+            chunks = await self._retrieve_with_multi_strategy(user_query, k)
+            
         ranked_chunks = self._apply_intent_aware_ranking(user_query, chunks)
         context = self._format_chunks_for_prompt(ranked_chunks)
         prompt = self._build_prompt(
@@ -145,11 +180,62 @@ class RAG:
         async for piece in self.llm_provider.generate_response_streaming(prompt):
             yield piece
 
+    async def _retrieve_with_language_awareness(
+        self, 
+        query: str, 
+        k: int,
+        force_language: Optional[str] = None,
+        enable_cross_language: bool = False
+    ) -> List[RetrievedChunk]:
+        """
+        Language-aware retrieval strategy with multiple fallbacks.
+        
+        Args:
+            query: User query
+            k: Number of results
+            force_language: Force specific language ('ar', 'en')
+            enable_cross_language: Allow mixed language results
+        """
+        logger.debug(f"Language-aware retrieval for: '{query[:50]}...', force_language: {force_language}")
+        
+        try:
+            # Use smart search from language router
+            docs = await self.language_router.smart_search(
+                query=query,
+                k=k * 2,  # Get more results for better ranking
+                force_language=force_language,
+                fallback_to_all=True,
+                enable_cross_language=enable_cross_language
+            )
+            
+            # Convert to RetrievedChunk format
+            chunks = []
+            for idx, doc in enumerate(docs):
+                # Use similarity score from metadata if available, otherwise calculate position-based score
+                similarity_score = doc.metadata.get('similarity_score', 1.0 - (idx / max(len(docs), 1)) * 0.3)
+                
+                chunks.append(RetrievedChunk(
+                    content=doc.page_content,
+                    metadata=doc.metadata,
+                    relevance_score=similarity_score,
+                ))
+            
+            if chunks:
+                detected_lang = force_language or detect_query_language_simple(query)
+                logger.info(f"Language-aware retrieval successful: {len(chunks)} chunks for '{detected_lang}' query")
+            else:
+                logger.warning(f"Language-aware retrieval returned no results for: '{query[:30]}...'")
+            
+            return chunks
+            
+        except Exception as e:
+            logger.warning(f"Language-aware retrieval failed: {e}, falling back to multi-strategy")
+            # Fallback to standard multi-strategy search
+            return await self._retrieve_with_multi_strategy(query, k)
+
     async def _retrieve_with_multi_strategy(self, query: str, k: int) -> List[RetrievedChunk]:
         """
-        Optimized multi-strategy retrieval for comprehensive coverage with minimal latency.
-        
-        Strategy: Run searches in parallel for speed, then intelligently merge results.
+        Standard multi-strategy retrieval (fallback when language routing fails).
         """
         all_chunks = []
         chunk_dedup = {}  # hash -> best_chunk to avoid duplicates
@@ -179,7 +265,7 @@ class RAG:
             
         except Exception as e:
             logger.warning(f"Multi-strategy search failed: {e}")
-            # Fallback to simple search
+            # Final fallback to simple search
             all_chunks = await self._semantic_search(query, k)
         
         # Sort by relevance and return top results
@@ -262,7 +348,7 @@ class RAG:
         entities = []
         query_lower = query.lower()
         
-        # Common HR entities and roles
+        # Common athr360 entities and roles
         hr_entities = [
             'doctor', 'physician', 'manager', 'director', 'supervisor', 'coordinator',
             'hr', 'admin', 'reception', 'contact', 'support', 'representative'
@@ -512,3 +598,18 @@ class RAG:
         Let the LLM decide what to do with the retrieved information.
         """
         return True
+
+    async def get_language_statistics(self) -> Dict[str, int]:
+        """Get language distribution statistics from the vector store."""
+        if self.language_router:
+            return self.language_router.get_language_distribution()
+        else:
+            return self.vector_store.get_language_statistics()
+
+    async def is_language_available(self, language: str) -> bool:
+        """Check if documents are available in a specific language."""
+        if self.language_router:
+            return self.language_router.is_language_available(language)
+        else:
+            stats = self.vector_store.get_language_statistics()
+            return stats.get(language, 0) > 0

@@ -8,7 +8,7 @@ USE_AWS_SECRETS=${USE_AWS_SECRETS:-true}
 SKIP_DB_INIT=${SKIP_DB_INIT:-false}
 SKIP_DB_WAIT=${SKIP_DB_WAIT:-false}
 
-echo "[ENTRYPOINT] Starting HR Teams Bot instance: $INSTANCE on port: $APP_PORT"
+echo "[ENTRYPOINT] Starting compliance Bot instance: $INSTANCE on port: $APP_PORT"
 echo "[ENTRYPOINT] USE_AWS_SECRETS: $USE_AWS_SECRETS"
 echo "[ENTRYPOINT] SKIP_DB_INIT: $SKIP_DB_INIT"
 
@@ -65,4 +65,4 @@ mkdir -p /app/logs
 
 # Start the application
 echo "[ENTRYPOINT] Launching application on port $APP_PORT"
-exec python -m uvicorn hrbot.api.app:app --host 0.0.0.0 --port "$APP_PORT" --workers 1
+exec python -m uvicorn athr360.api.app:app --host 0.0.0.0 --port "$APP_PORT" --workers 1

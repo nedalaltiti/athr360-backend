@@ -17,7 +17,7 @@ from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
 
-from athr360.api.routers import admin, feedback, health, teams, chat
+from athr360.api.routers import admin, feedback, health, chat
 from athr360.config.settings import settings
 from athr360.utils.di import get_vector_store         
 from athr360.infrastructure.ingest import refresh_vector_index 
@@ -101,12 +101,6 @@ async def lifespan(_: FastAPI) -> AsyncGenerator[None, None]:
         logger.info(f"Knowledge base: {app_config.knowledge_base_dir}")
         logger.info(f"Embeddings: {app_config.embeddings_dir}")
         logger.info(f"Prompts: {app_config.prompt_dir}")
-        logger.info(f"Features: NOI={app_config.supports_noi}")
-        
-        # Show Teams app configuration
-        teams_settings = settings.teams
-        if teams_settings.app_id:
-            logger.info(f"🤖 Teams App ID: {teams_settings.app_id[:8]}...{teams_settings.app_id[-8:] if len(teams_settings.app_id) > 16 else teams_settings.app_id}")
         
     except Exception as e:
         logger.error(f"Error during app instance detection: {e}")
@@ -193,19 +187,7 @@ async def cors_middleware(request: Request, call_next):
     
     return response
 
-# Commented out FastAPI CORS middleware to avoid conflicts with custom middleware
-# if settings.cors_origins:   # don't enable CORS unless explicitly configured
-#     app.add_middleware(
-#         CORSMiddleware,
-#         allow_origins=settings.cors_origins,
-#         allow_credentials=True,
-#         allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-#         allow_headers=["*"],
-#         expose_headers=["*"],
-#     )
-
 app.include_router(health.router, prefix="/health", tags=["health"])
-app.include_router(teams.router,  prefix="/api/messages", tags=["teams"])
 app.include_router(feedback.router, prefix="/api/feedback", tags=["feedback"])
 app.include_router(admin.router,  prefix="/admin", tags=["admin"])
 app.include_router(chat.router, prefix="/api", tags=["chat"])

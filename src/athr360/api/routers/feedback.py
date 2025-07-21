@@ -6,13 +6,11 @@ from athr360.services.feedback import save_feedback
 from athr360.config.settings import settings
 from typing import Optional
 from athr360.infrastructure.cards import create_feedback_card
-from athr360.infrastructure.teams_adapter import TeamsAdapter
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
 feedback_service = FeedbackService()
-teams_adapter = TeamsAdapter()
 
 class EnhancedFeedbackRequest(BaseModel):
     user_id: str
@@ -59,7 +57,6 @@ async def submit_enhanced_feedback(
                 message = "Thank you for your feedback. We're sorry your experience wasn't better, and we'll work to improve."
                 
             background_tasks.add_task(
-                teams_adapter.send_message,
                 feedback.service_url,
                 feedback.conversation_id,
                 message
@@ -110,10 +107,10 @@ async def handle_card_action(request: Request):
                 updated_card = create_feedback_card(selected_rating=rating)
 
                 # Send updated card (this replaces original visually)
-                await teams_adapter.send_card(service_url, conversation_id, updated_card)
+                await send_card(service_url, conversation_id, updated_card)
 
                 # Acknowledge selection to avoid generic toast feeling impersonal
-                await teams_adapter.send_message(
+                await send_message(
                     service_url,
                     conversation_id,
                     "Great! You selected a {}-star rating. Feel free to add a comment or press \"Provide Feedback\" to submit.".format(rating)
@@ -123,7 +120,7 @@ async def handle_card_action(request: Request):
             
         elif action_type == "dismiss_feedback":
             # User clicked "No Later"
-            await teams_adapter.send_message(
+            await send_message(
                 service_url, 
                 conversation_id, 
                 "No problem! Feel free to provide feedback another time."
@@ -155,21 +152,21 @@ async def handle_card_action(request: Request):
                 # Send thank you message based on rating
                 if rating >= 4:
                     # Positive response for high ratings
-                    await teams_adapter.send_message(
+                    await send_message(
                         service_url, 
                         conversation_id, 
-                        "Thank you for your positive feedback! We're glad you had a good experience with our HR Assistant."
+                        "Thank you for your positive feedback! We're glad you had a good experience with our compliance Assistant."
                     )
                 elif rating <= 2:
                     # Apologetic response for low ratings
-                    await teams_adapter.send_message(
+                    await send_message(
                         service_url, 
                         conversation_id, 
                         "Thank you for your feedback. We're sorry your experience wasn't better, and we'll work to improve."
                     )
                 else:
                     # Neutral response for middle ratings
-                    await teams_adapter.send_message(
+                    await send_message(
                         service_url, 
                         conversation_id, 
                         "Thank you for your feedback. We're always working to improve our services."
@@ -178,7 +175,7 @@ async def handle_card_action(request: Request):
                 
             except Exception as e:
                 logger.error(f"Error recording feedback: {str(e)}")
-                await teams_adapter.send_message(
+                await send_message(
                     service_url, 
                     conversation_id, 
                     "There was an error processing your feedback. Please try again."

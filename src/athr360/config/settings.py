@@ -63,7 +63,7 @@ class DatabaseSettings:
                 
                 # Get AWS configuration
                 region = get_aws_region()
-                secret_name = get_env_var("AWS_DB_SECRET_NAME", "chatbot-clarity-db-dev-postgres")
+                secret_name = get_env_var("AWS_DB_SECRET_NAME", "chatbot-db-dev-postgres")
                 
                 logger.info(f"Attempting to load database credentials from AWS Secrets Manager: {secret_name}")
                 db_creds = get_database_credentials(secret_name, region)
@@ -256,42 +256,6 @@ class EmbeddingSettings:
         )
 
 @dataclass(frozen=True)
-class TeamsSettings:
-    app_id: Optional[str] = None
-    app_password: Optional[str] = None
-    tenant_id: Optional[str] = None  # Shared Azure AD tenant ID for all app instances
-    client_id: Optional[str] = None
-    client_secret: Optional[str] = None
-
-    @classmethod
-    def from_environment(cls) -> "TeamsSettings":
-        # With separate .env files, we now use generic environment variables
-        # The appropriate .env.jo or .env.us file should be loaded based on the instance
-        
-        app_id = get_env_var("APP_ID") or get_env_var("MICROSOFT_APP_ID")
-        app_password = get_env_var("APP_PASSWORD") or get_env_var("MICROSOFT_APP_PASSWORD")
-        
-        try:
-            from athr360.config.app_config import get_current_app_config
-            app_config = get_current_app_config()
-            logger.info(f"Loading Teams settings for app instance: {app_config.name}")
-        except Exception as e:
-            logger.warning(f"Could not get app config context: {e}")
-        
-        if app_id:
-            logger.info("Using APP_ID from environment")
-        else:
-            logger.warning("No APP_ID found in environment")
-                
-        return cls(
-            app_id=app_id,
-            app_password=app_password,
-            tenant_id=get_env_var("TENANT_ID"),  # Same tenant for all app instances
-            client_id=get_env_var("CLIENT_ID"),
-            client_secret=get_env_var("CLIENT_SECRET"),
-        )
-
-@dataclass(frozen=True)
 class GoogleCloudSettings:
     project_id: Optional[str] = None
     location: str = "us-central1"
@@ -315,33 +279,13 @@ class FeedbackSettings:
             feedback_timeout_minutes=get_env_var_int("FEEDBACK_TIMEOUT_MINUTES", cls.feedback_timeout_minutes),
         )
 
-@dataclass(frozen=True)
-class HRSupportSettings:
-    url: str = "https://hrsupport.usclarity.com/support/home"
-    domain: str = "hrsupport.usclarity.com"
-
-    @classmethod
-    def from_environment(cls) -> "HRSupportSettings":
-        try:
-            from athr360.config.app_config import get_current_app_config
-            app_config = get_current_app_config()
-            return cls(
-                url=get_env_var("HR_SUPPORT_URL", app_config.hr_support_url),
-                domain=get_env_var("HR_SUPPORT_DOMAIN", app_config.hr_support_url.split("//")[1].split("/")[0]),
-            )
-        except ImportError:
-            # Fallback if app config module not available (during initial setup)
-            return cls(
-                url=get_env_var("HR_SUPPORT_URL", cls.url),
-                domain=get_env_var("HR_SUPPORT_DOMAIN", cls.domain),
-            )
 
 @dataclass(frozen=True)
 class AWSSettings:
     """AWS-specific configuration settings."""
     use_secrets_manager: bool = False
     region: str = "us-west-1"
-    db_secret_name: str = "chatbot-clarity-db-dev-postgres"
+    db_secret_name: str = "chatbot-db-dev-postgres"
     gemini_secret_name: str = "genai-gemini-vertex-prod-api"
     
     @classmethod
@@ -354,20 +298,43 @@ class AWSSettings:
         )
 
 @dataclass(frozen=True)
+class MistralOCRSettings:
+    """Mistral OCR configuration for enhanced Arabic PDF extraction."""
+    enabled: bool = False
+    project_id: str = "genai-mistral-vertex-dev-api"
+    region: str = "us-central1"
+    model_name: str = "mistral-ocr"
+    model_version: str = "2505"
+    service_account_json: Optional[str] = None
+    timeout_seconds: int = 3600
+    
+    @classmethod
+    def from_environment(cls) -> "MistralOCRSettings":
+        return cls(
+            enabled=get_env_var_bool("MISTRAL_OCR_ENABLED", cls.enabled),
+            project_id=get_env_var("MISTRAL_OCR_PROJECT_ID", cls.project_id),
+            region=get_env_var("MISTRAL_OCR_REGION", cls.region),
+            model_name=get_env_var("MISTRAL_OCR_MODEL_NAME", cls.model_name),
+            model_version=get_env_var("MISTRAL_OCR_MODEL_VERSION", cls.model_version),
+            service_account_json=get_env_var("MISTRAL_OCR_SERVICE_ACCOUNT_JSON"),
+            timeout_seconds=get_env_var_int("MISTRAL_OCR_TIMEOUT_SECONDS", cls.timeout_seconds),
+        )
+
+@dataclass(frozen=True)
 class PerformanceSettings:
-    """Performance optimization settings for Microsoft Teams streaming"""
+    """Performance optimization settings for compliance bot streaming"""
     use_intent_classification: bool = False  # Skip Gemini-based intent classification
     cache_embeddings: bool = True
     cache_ttl_seconds: int = 3600
     min_streaming_length: int = 200  # Lowered from 400 to enable streaming for more responses
     show_acknowledgment_threshold: int = 10  # Show "looking into it" for queries > 10 words
     enable_streaming: bool = True  # Enable/disable streaming responses
-    streaming_delay: float = 0.8  # Reduced delay for faster streaming (Microsoft minimum)
+    streaming_delay: float = 0.8  # Reduced delay for faster streaming
     max_chunk_size: int = 120  # Reduced for faster perception
     
-    # Semantic similarity settings for HR topic detection
-    hr_similarity_threshold: float = 0.55  # Lowered to be less restrictive for HR topics
-    hr_borderline_threshold_offset: float = 0.20  # Increased range for borderline checks
+    # Semantic similarity settings for compliance topic detection
+    compliance_similarity_threshold: float = 0.55  # Lowered to be less restrictive for compliance topics
+    compliance_borderline_threshold_offset: float = 0.20  # Increased range for borderline checks
     
     # Enhanced document processing settings
     chunk_size: int = 1500  # Increased for more comprehensive chunks
@@ -388,8 +355,8 @@ class PerformanceSettings:
             enable_streaming=get_env_var_bool("ENABLE_STREAMING", cls.enable_streaming),
             streaming_delay=get_env_var_float("STREAMING_DELAY", cls.streaming_delay),
             max_chunk_size=get_env_var_int("MAX_CHUNK_SIZE", cls.max_chunk_size),
-            hr_similarity_threshold=get_env_var_float("HR_SIMILARITY_THRESHOLD", cls.hr_similarity_threshold),
-            hr_borderline_threshold_offset=get_env_var_float("HR_BORDERLINE_THRESHOLD_OFFSET", cls.hr_borderline_threshold_offset),
+            compliance_similarity_threshold=get_env_var_float("COMPLIANCE_SIMILARITY_THRESHOLD", cls.compliance_similarity_threshold),
+            compliance_borderline_threshold_offset=get_env_var_float("COMPLIANCE_BORDERLINE_THRESHOLD_OFFSET", cls.compliance_borderline_threshold_offset),
             chunk_size=get_env_var_int("DOCUMENT_CHUNK_SIZE", cls.chunk_size),
             chunk_overlap=get_env_var_int("DOCUMENT_CHUNK_OVERLAP", cls.chunk_overlap),
             max_chunks_per_query=get_env_var_int("MAX_CHUNKS_PER_QUERY", cls.max_chunks_per_query),
@@ -400,7 +367,7 @@ class PerformanceSettings:
 
 @dataclass(frozen=True)
 class AppSettings:
-    app_name: str = "HR Teams Bot"
+    app_name: str = "Compliance Bot"
     host: str = "0.0.0.0"
     port: int = 3978
     debug: bool = False  # Set to False for production
@@ -408,11 +375,10 @@ class AppSettings:
     db: DatabaseSettings = field(default_factory=DatabaseSettings.from_environment)
     gemini: GeminiSettings = field(default_factory=GeminiSettings.from_environment)
     embeddings: EmbeddingSettings = field(default_factory=EmbeddingSettings.from_environment)
-    teams: TeamsSettings = field(default_factory=TeamsSettings.from_environment)
     google_cloud: GoogleCloudSettings = field(default_factory=GoogleCloudSettings.from_environment)
     feedback: FeedbackSettings = field(default_factory=FeedbackSettings.from_environment)
-    hr_support: HRSupportSettings = field(default_factory=HRSupportSettings.from_environment)
     aws: AWSSettings = field(default_factory=AWSSettings.from_environment)
+    mistral_ocr: MistralOCRSettings = field(default_factory=MistralOCRSettings.from_environment)
     performance: PerformanceSettings = field(default_factory=PerformanceSettings.from_environment)
     session_idle_minutes: int = 30
 

@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 class ConversationFlow(Enum):
     """Conversation flow classifications."""
     CONTINUE_NORMAL = "continue_normal"          # Normal Compliance PDPL conversation continues
-    CONTINUE_INFORMATIONAL = "continue_informational"  # Informational response (NOI, policies) - no feedback
+    CONTINUE_INFORMATIONAL = "continue_informational"  # Informational response (policies) - no feedback
     CONTINUE_REDIRECTED = "continue_redirected"  # Off-topic but redirected to Compliance PDPL
     END_NATURAL = "end_natural"                  # Natural conversation ending
     END_SATISFIED = "end_satisfied"              # User got what they needed
@@ -53,10 +53,10 @@ class ContentClassificationService:
         self, 
         user_message: str, 
         conversation_context: Optional[str] = None,
-        response_type: Optional[str] = None  # "noi", "policy", "standard", etc.
+        response_type: Optional[str] = None  # "policy", "standard", etc.
     ) -> ConversationAnalysis:
         """
-        Analyze conversation flow with enhanced NOI and informational response handling.
+        Analyze conversation flow with informational response handling.
         Includes fallback logic for network connectivity issues.
         
         Args:
@@ -68,17 +68,6 @@ class ContentClassificationService:
             ConversationAnalysis with smart feedback determination
         """
         try:
-            # Special handling for NOI and informational responses
-            if response_type == "noi":
-                return ConversationAnalysis(
-                    flow_type=ConversationFlow.CONTINUE_INFORMATIONAL,
-                    confidence=0.95,
-                    reason="NOI response - informational, no feedback needed",
-                    requires_feedback=False,
-                    feedback_timing="none"
-                )
-            
-            # Build enhanced analysis prompt
             prompt = self._build_enhanced_flow_analysis_prompt(user_message, conversation_context)
             
             # Get LLM analysis with timeout
@@ -120,8 +109,6 @@ CONVERSATION CONTEXT:
         app_context = f"""
 APP INSTANCE CONTEXT:
 - Current region: {self.app_config.name}
-- Supports NOI: {self.app_config.supports_noi}
-        - Compliance PDPL Support URL: {self.app_config.hr_support_url}
 
 """
         
@@ -133,11 +120,11 @@ FLOW CATEGORIES:
 
         **CONTINUE_NORMAL** - Standard Compliance PDPL questions that continue conversation
 - Examples: "What's my leave policy?", "How do I submit a request?", "Who is my manager?"
-- Single words that could be topics: "noi", "benefits", "policy", "vacation", "insurance"
-        - Compliance PDPL abbreviations or terms: "NOI", "PTO", "401k", "FMLA", etc.
+- Single words that could be topics: "benefits", "policy", "vacation", "insurance"
+        - Compliance PDPL abbreviations or terms: "PTO", "401k", "FMLA", etc.
 - Feedback: Delayed (10-15 minutes of inactivity)
 
-**CONTINUE_INFORMATIONAL** - User received informational content (policies, procedures, NOI responses)
+**CONTINUE_INFORMATIONAL** - User received informational content (policies, procedures)
 - Examples: After explaining policies, providing contact info, giving procedural guidance
 - Feedback: None immediately (user likely processing information)
 
@@ -167,7 +154,6 @@ FLOW CATEGORIES:
 CRITICAL CLASSIFICATION RULES:
 
 1. **SINGLE WORDS OR SHORT PHRASES**: Almost always CONTINUE_NORMAL
-   - "noi" → CONTINUE_NORMAL (could be asking about Notice of Investigation)
    - "benefits" → CONTINUE_NORMAL (asking about benefits)
    - "policy" → CONTINUE_NORMAL (asking about policies)
    - "quit" → CONTINUE_NORMAL (could be asking about resignation process)
@@ -185,7 +171,7 @@ CRITICAL CLASSIFICATION RULES:
 
 4. **CONTEXT MATTERS**: Consider if this could be:
    - A new question/topic
-   - An abbreviation (NOI, PTO, etc.)
+   - An abbreviation (PTO, etc.)
    - An expression of frustration that needs support
    - A request for information
 
@@ -201,14 +187,6 @@ Reason: [Brief explanation]
 Requires_Feedback: [true/false]
 Feedback_Timing: [immediate/delayed/none]
 Should_Escalate: [true/false]
-
-Example for "noi":
-Flow: CONTINUE_NORMAL
-Confidence: 0.90
-Reason: Single word that could be asking about Notice of Investigation - continue conversation
-Requires_Feedback: false
-Feedback_Timing: delayed
-Should_Escalate: false
 
 Analyze the message:"""
         
@@ -279,7 +257,6 @@ Analyze the message:"""
             return (
                 f"I notice your message contains content that may not be appropriate for our workplace environment. "
                 f"For work-related concerns, please submit them through our Compliance PDPL Support portal: "
-                f"{self.app_config.hr_support_url}"
             )
         
         elif analysis.flow_type == ConversationFlow.CONTINUE_REDIRECTED:
@@ -292,7 +269,7 @@ Analyze the message:"""
             return "Glad I could help! Feel free to reach out anytime."
         
         else:
-            return None  # Use standard HR assistant response
+            return None  # Use standard athr360 assistant response
     
     def _get_crisis_response_message(self) -> str:
         """
@@ -308,44 +285,16 @@ Analyze the message:"""
                 "I am programmed to provide Compliance PDPL-related information, and I am not qualified to provide assistance with suicidal thoughts.\n\n"
             )
             
-            # App-specific crisis guidance
-            if self.app_config.instance_id == "jo":
-                # Jordan-specific guidance
-                crisis_guidance = (
-                    "• **Immediate Assistance:**\n"
-                    "If you are in immediate danger, please call emergency services or go to the nearest hospital.\n\n"
-                    "• **Mental Health Support:**\n"
-                    "Reach out to a crisis hotline or mental health professional for help.\n"
-                    "Contact local emergency services (911) or mental health professionals in Jordan.\n\n"
-                    "• **Workplace Support:**\n"
-                    f"For work-related support, you can contact our Compliance PDPL team: {self.app_config.hr_support_url}\n\n"
-                    "Please prioritize your safety and reach out to qualified mental health professionals."
-                )
-            
-            elif self.app_config.instance_id == "us":
-                # US-specific guidance with correct numbers
-                crisis_guidance = (
-                    "• **Immediate Assistance:**\n"
-                    "If you are in immediate danger, please call emergency services (911) or go to the nearest hospital.\n\n"
-                    "• **Mental Health Support:**\n"
-                    "Reach out to a crisis hotline or mental health professional for help.\n"
-                    "Suicide & Crisis Lifeline: Call or text 988. Available 24/7, free, and confidential.\n\n"
-                    "• **Workplace Support:**\n"
-                    f"For work-related support, you can contact our Compliance PDPL team: {self.app_config.hr_support_url}\n\n"
-                    "Please prioritize your safety and reach out to qualified mental health professionals."
-                )
-            
-            else:
-                # Generic guidance for other regions
-                crisis_guidance = (
-                    "• **Immediate Assistance:**\n"
-                    "If you are in immediate danger, please call your local emergency services or go to the nearest hospital.\n\n"
-                    "• **Mental Health Support:**\n"
-                    "Reach out to a crisis hotline or mental health professional in your area for help.\n\n"
-                    "• **Workplace Support:**\n"
-                    f"For work-related support, you can contact our Compliance PDPL team: {self.app_config.hr_support_url}\n\n"
-                    "Please prioritize your safety and reach out to qualified mental health professionals."
-                )
+            # Crisis guidance for compliance instance
+            crisis_guidance = (
+                "• **Immediate Assistance:**\n"
+                "If you are in immediate danger, please call emergency services or go to the nearest hospital.\n\n"
+                "• **Mental Health Support:**\n"
+                "Reach out to a crisis hotline or mental health professional for help.\n"
+                "Contact local emergency services or mental health professionals in your area.\n\n"
+                "• **Workplace Support:**\n"
+                "Please prioritize your safety and reach out to qualified mental health professionals."
+            )
             
             return base_message + crisis_guidance
             
@@ -355,7 +304,6 @@ Analyze the message:"""
             return (
                 "I'm concerned about your message. If you're experiencing thoughts of self-harm, "
                 "please reach out to a mental health professional or local emergency services immediately. "
-                f"For workplace support, you can contact our Compliance PDPL team: {self.app_config.hr_support_url}"
             )
     
     def should_end_conversation(self, analysis: ConversationAnalysis) -> bool:

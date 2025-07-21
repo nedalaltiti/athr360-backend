@@ -6,7 +6,6 @@ import asyncio
 from datetime import datetime, timezone, timedelta
 import logging
 from uuid import uuid4
-from athr360.infrastructure.teams_adapter import TeamsAdapter
 from athr360.config.settings import settings
 from athr360.infrastructure.cards import create_feedback_card
 from sqlalchemy.exc import SQLAlchemyError
@@ -18,7 +17,8 @@ logger = logging.getLogger(__name__)
 
 class FeedbackService:
     def __init__(self):
-        self.adapter = TeamsAdapter()
+        # TeamsAdapter removed - UI interface is used instead of Teams
+        self.adapter = None  # Teams integration disabled
         self.pending_feedback = {}  # user_id: asyncio.Task - tracks scheduled feedback tasks
         self.user_activity = {}     # user_id: last_activity_time - tracks user activity
         self.feedback_sent = set()  # user_ids who already received feedback this session
@@ -41,8 +41,8 @@ class FeedbackService:
         
         Args:
             user_id: User identifier
-            service_url: Teams service URL  
-            conversation_id: Teams conversation ID
+            service_url: UI service URL  
+            conversation_id: UI conversation ID
             delay_minutes: Minutes to wait for inactivity (default from settings)
         """
         # Don't schedule if user already got feedback this session
@@ -72,8 +72,8 @@ class FeedbackService:
         
         Args:
             user_id: User identifier
-            service_url: Teams service URL
-            conversation_id: Teams conversation ID 
+            service_url: UI service URL
+            conversation_id: UI conversation ID 
             delay_minutes: Minutes of inactivity required
         """
         try:
@@ -128,12 +128,17 @@ class FeedbackService:
         Send feedback prompt with adaptive card.
         
         Args:
-            service_url: Teams service URL
-            conversation_id: Teams conversation ID
+            service_url: UI service URL (unused - Teams integration disabled)
+            conversation_id: UI conversation ID (unused - Teams integration disabled)
             
         Returns:
             Activity ID of the sent card, or None if failed
         """
+        # Teams integration disabled - UI interface is used instead
+        if self.adapter is None:
+            logger.debug("Teams integration disabled - feedback prompt not sent via Teams")
+            return None
+            
         try:
             # Create the feedback card
             feedback_card = create_feedback_card()

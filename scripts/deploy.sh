@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# HR Teams Bot Deployment Script
+# athr360 Teams Bot Deployment Script
 # Supports single instance and multi-app deployments using Docker Compose profiles
 
 set -euo pipefail
@@ -18,7 +18,7 @@ PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 COMPOSE_FILE="$PROJECT_ROOT/docker-compose.yml"
 
 # Default environment variables
-export COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-hrbot}"
+export COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-athr360}"
 export DOCKER_BUILDKIT=1
 export COMPOSE_DOCKER_CLI_BUILD=1
 
@@ -42,14 +42,14 @@ log_error() {
 # Help function
 show_help() {
     cat << EOF
-HR Teams Bot Deployment Script
+Compliance Bot Deployment Script
 
 USAGE:
     $0 <command> [options]
 
 COMMANDS:
     Single Instance Deployment:
-        single <instance>     Deploy single instance (jo or us)
+        single <instance>     Deploy single instance (compliance)
         
     Multi-App Deployment:
         multi                 Deploy both instances with nginx proxy
@@ -70,7 +70,7 @@ COMMANDS:
 
 EXAMPLES:
     # Deploy Jordan instance only
-    $0 single jo
+    $0 single compliance
     
     # Deploy US instance only  
     $0 single us
@@ -82,15 +82,14 @@ EXAMPLES:
     $0 status
     
     # View logs for specific service
-    $0 logs hrbot-jo
+    $0 logs athr360-compliance
     
     # Restart specific service
-    $0 restart hrbot-us
+    $0 restart athr360-compliance
 
 ENVIRONMENT VARIABLES:
-    COMPOSE_PROJECT_NAME    Project name for Docker Compose (default: hrbot)
-    JO_PORT                 Port for Jordan instance (default: 3978)
-    US_PORT                 Port for US instance (default: 3979)
+    COMPOSE_PROJECT_NAME    Project name for Docker Compose (default: athr360)
+    COMPLIANCE_PORT         Port for compliance instance (default: 3978)
     NGINX_HTTP_PORT         HTTP port for nginx (default: 80)
     NGINX_HTTPS_PORT        HTTPS port for nginx (default: 443)
 
@@ -133,21 +132,14 @@ validate_env_files() {
         exit 1
     fi
     
-    # Check for required variables
-    local required_vars=("APP_ID" "APP_PASSWORD")
-    for var in "${required_vars[@]}"; do
-        if ! grep -q "^$var=" "$env_file"; then
-            log_warning "$var not found in $env_file"
-        fi
-    done
 }
 
 # Deployment functions
 deploy_single() {
     local instance="$1"
     
-    if [[ "$instance" != "jo" && "$instance" != "us" ]]; then
-        log_error "Invalid instance: $instance. Must be 'jo' or 'us'"
+    if [[ "$instance" != "compliance" ]]; then
+        log_error "Invalid instance: $instance. Must be 'compliance'"
         exit 1
     fi
     
@@ -168,7 +160,7 @@ deploy_single() {
     sleep 10
     
     # Check health
-    if check_service_health "hrbot-$instance"; then
+    if check_service_health "athr360-$instance"; then
         log_success "Single instance deployment completed successfully!"
         log_info "Instance: $instance"
         log_info "Port: $(get_instance_port "$instance")"
@@ -184,8 +176,7 @@ deploy_multi() {
     log_info "Deploying multi-app configuration..."
     
     # Validate both environment files
-    validate_env_files "jo"
-    validate_env_files "us"
+    validate_env_files "compliance"
     
     # Deploy all services with multi-app profile
     log_info "Starting all services with multi-app profile"
@@ -196,18 +187,15 @@ deploy_multi() {
     sleep 15
     
     # Check health of both instances
-    local jo_healthy=$(check_service_health "hrbot-jo")
-    local us_healthy=$(check_service_health "hrbot-us")
+    local compliance_healthy=$(check_service_health "athr360-compliance")
     local nginx_healthy=$(check_service_health "nginx")
     
-    if [[ "$jo_healthy" == "true" && "$us_healthy" == "true" && "$nginx_healthy" == "true" ]]; then
+    if [[ "$compliance_healthy" == "true" && "$nginx_healthy" == "true" ]]; then
         log_success "Multi-app deployment completed successfully!"
-        log_info "Jordan instance: http://localhost:${JO_PORT:-3978}"
-        log_info "US instance: http://localhost:${US_PORT:-3979}"
+        log_info "Compliance instance: http://localhost:${COMPLIANCE_PORT:-3978}"
         log_info "Nginx proxy: http://localhost:${NGINX_HTTP_PORT:-80}"
         log_info "Health checks:"
-        log_info "  - Jordan: http://localhost:${JO_PORT:-3978}/health"
-        log_info "  - US: http://localhost:${US_PORT:-3979}/health"
+        log_info "  - Compliance: http://localhost:${COMPLIANCE_PORT:-3978}/health"
     else
         log_error "Multi-app deployment failed - some services are not healthy"
         docker compose --profile multi-app logs
@@ -219,8 +207,7 @@ deploy_multi() {
 get_instance_port() {
     local instance="$1"
     case "$instance" in
-        "jo") echo "${JO_PORT:-3978}" ;;
-        "us") echo "${US_PORT:-3979}" ;;
+        "compliance") echo "${COMPLIANCE_PORT:-3978}" ;;
         *) echo "3978" ;;
     esac
 }
@@ -312,7 +299,7 @@ build_images() {
 check_health() {
     log_info "Checking health of running services..."
     
-    local services=("hrbot-jo" "hrbot-us" "postgres" "redis" "nginx")
+    local services=("athr360-compliance" "postgres" "redis" "nginx")
     local healthy_count=0
     local total_count=0
     
@@ -333,7 +320,7 @@ check_health() {
 
 open_shell() {
     local instance="$1"
-    local container="hrbot-$instance"
+    local container="athr360-$instance"
     
     if docker compose ps "$container" | grep -q "Up"; then
         log_info "Opening shell in $container..."
@@ -347,7 +334,7 @@ open_shell() {
 backup_data() {
     local backup_dir="$PROJECT_ROOT/backups"
     local timestamp=$(date +%Y%m%d_%H%M%S)
-    local backup_file="$backup_dir/hrbot_backup_$timestamp.tar.gz"
+    local backup_file="$backup_dir/athr360_backup_$timestamp.tar.gz"
     
     mkdir -p "$backup_dir"
     
@@ -357,11 +344,10 @@ backup_data() {
     docker run --rm \
         -v "${COMPOSE_PROJECT_NAME}_postgres_data:/data/postgres:ro" \
         -v "${COMPOSE_PROJECT_NAME}_redis_data:/data/redis:ro" \
-        -v "${COMPOSE_PROJECT_NAME}_hrbot_logs_jo:/data/logs_jo:ro" \
-        -v "${COMPOSE_PROJECT_NAME}_hrbot_logs_us:/data/logs_us:ro" \
+        -v "${COMPOSE_PROJECT_NAME}_athr360_logs_compliance:/data/logs_compliance:ro" \
         -v "$backup_dir:/backup" \
         alpine:latest \
-        tar czf "/backup/hrbot_backup_$timestamp.tar.gz" -C /data .
+        tar czf "/backup/athr360_backup_$timestamp.tar.gz" -C /data .
     
     log_success "Backup created: $backup_file"
 }
@@ -388,8 +374,7 @@ restore_data() {
         docker run --rm \
             -v "${COMPOSE_PROJECT_NAME}_postgres_data:/data/postgres" \
             -v "${COMPOSE_PROJECT_NAME}_redis_data:/data/redis" \
-            -v "${COMPOSE_PROJECT_NAME}_hrbot_logs_jo:/data/logs_jo" \
-            -v "${COMPOSE_PROJECT_NAME}_hrbot_logs_us:/data/logs_us" \
+            -v "${COMPOSE_PROJECT_NAME}_athr360_logs_compliance:/data/logs_compliance" \
             -v "$(dirname "$backup_file"):/backup:ro" \
             alpine:latest \
             tar xzf "/backup/$(basename "$backup_file")" -C /data

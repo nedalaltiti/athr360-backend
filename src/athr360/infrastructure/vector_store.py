@@ -147,9 +147,11 @@ class VectorStore:
          k: int = 5,
          *,
          top_k: int | None = None,      
+         language_filter: str | None = None,  # NEW: Language filtering
+         language_preference: str | None = None,  # NEW: Language boosting
 
      ) -> list[Document]:
-        logger.debug(f"Similarity search called with query: '{query[:50]}...', k={k}, docs available: {len(self._docs)}")
+        logger.debug(f"Similarity search called with query: '{query[:50]}...', k={k}, language_filter={language_filter}, docs available: {len(self._docs)}")
         
         if self._matrix is None or not len(self._docs):
             logger.warning(f"No documents available for search! Matrix: {self._matrix is not None}, Docs: {len(self._docs)}")
@@ -157,9 +159,30 @@ class VectorStore:
 
         if top_k is not None:
             k = top_k
+        
+        # Apply language filtering if specified
+        if language_filter:
+            filtered_indices = [
+                i for i, doc in enumerate(self._docs)
+                if doc.metadata.get('language') == language_filter
+            ]
+            
+            if not filtered_indices:
+                logger.warning(f"No documents found for language filter: {language_filter}")
+                return []
+            
+            # Use filtered matrix and documents
+            filtered_matrix = self._matrix[filtered_indices]
+            filtered_docs = [self._docs[i] for i in filtered_indices]
+            logger.debug(f"Language filtering applied: {len(filtered_docs)} docs for language '{language_filter}'")
+            
+        else:
+            filtered_matrix = self._matrix
+            filtered_docs = self._docs
+            filtered_indices = list(range(len(self._docs)))
             
         # Check cache first
-        cache_key = (query, k)
+        cache_key = (query, k, language_filter, language_preference)
         if self._cache_enabled and cache_key in self._cache:
             cached_result, timestamp = self._cache[cache_key]
             if time.time() - timestamp < self._cache_ttl:
@@ -175,7 +198,13 @@ class VectorStore:
         q /= np.linalg.norm(q) + 1e-9
 
         # Optimized similarity computation using vectorized operations
-        sims = np.dot(self._matrix, q)  # More efficient than matrix multiplication
+        sims = np.dot(filtered_matrix, q)  # More efficient than matrix multiplication
+        
+        # Apply language preference boosting if specified
+        if language_preference and not language_filter:
+            for i, doc in enumerate(filtered_docs):
+                if doc.metadata.get('language') == language_preference:
+                    sims[i] *= 1.2  # Boost preferred language by 20%
         
         # Use argpartition for better performance when k << n
         if k < len(sims) // 10:  # Only use argpartition for small k
@@ -184,13 +213,17 @@ class VectorStore:
         else:
             top_idx = np.argsort(sims)[-k:][::-1]
             
-        results = [self._docs[i] for i in top_idx]
+        results = [filtered_docs[i] for i in top_idx]
+        
+        # Add similarity scores to metadata for debugging
+        for i, doc in enumerate(results):
+            doc.metadata['similarity_score'] = float(sims[top_idx[i]])
         
         # Debug logging
         logger.debug(f"Similarity scores: {[sims[i] for i in top_idx[:5]]}")  # Top 5 scores
         logger.debug(f"Retrieved {len(results)} documents for query: '{query[:30]}...'")
         if results:
-            logger.debug(f"Top result: {results[0].page_content[:100]}...")
+            logger.debug(f"Top result language: {results[0].metadata.get('language', 'unknown')}")
         
         # Cache the results
         if self._cache_enabled:
@@ -206,6 +239,21 @@ class VectorStore:
                     del self._cache[key]
         
         return results
+        
+    def get_language_statistics(self) -> dict:
+        """Get statistics about language distribution in the database."""
+        stats = {}
+        for doc in self._docs:
+            lang = doc.metadata.get('language', 'unknown')
+            stats[lang] = stats.get(lang, 0) + 1
+        return stats
+    
+    def get_documents_by_language(self, language: str) -> list[Document]:
+        """Get all documents for a specific language."""
+        return [
+            doc for doc in self._docs 
+            if doc.metadata.get('language') == language
+        ]
 
     async def warmup(self) -> None:
         """Load data into RAM (called from FastAPI lifespan)."""

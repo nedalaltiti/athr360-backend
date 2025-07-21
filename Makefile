@@ -1,4 +1,4 @@
-# Makefile for HR Teams Bot Docker Operations
+# Makefile for ATHR360 Docker Operations
 # Usage: make <target>
 
 .PHONY: help build up down logs clean test deploy scale backup status
@@ -8,7 +8,7 @@
 
 # Variables
 COMPOSE_FILE := docker-compose.yml
-APP_NAME := hrbot
+APP_NAME := athr360
 BACKUP_DIR := ./backups
 
 # Colors for output
@@ -20,7 +20,7 @@ NC := \033[0m # No Color
 
 ## Help target
 help: ## Show this help message
-	@echo "$(BLUE)HR Teams Bot Docker Commands$(NC)"
+	@echo "$(BLUE)ATHR360 Docker Commands$(NC)"
 	@echo "$(YELLOW)Usage: make <target>$(NC)"
 	@echo ""
 	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z_-]+:.*?## / {printf "  $(GREEN)%-15s$(NC) %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -162,8 +162,8 @@ clean-images: ## Remove application images
 backup: ## Backup application data and logs
 	@echo "$(BLUE)Creating backup...$(NC)"
 	@mkdir -p $(BACKUP_DIR)
-	@docker run --rm -v hrbot-data:/data -v $(shell pwd)/$(BACKUP_DIR):/backup alpine tar czf /backup/hrbot-data-$(shell date +%Y%m%d-%H%M%S).tar.gz -C /data .
-	@docker run --rm -v hrbot-logs:/logs -v $(shell pwd)/$(BACKUP_DIR):/backup alpine tar czf /backup/hrbot-logs-$(shell date +%Y%m%d-%H%M%S).tar.gz -C /logs .
+	@docker run --rm -v ATHR360-data:/data -v $(shell pwd)/$(BACKUP_DIR):/backup alpine tar czf /backup/ATHR360-data-$(shell date +%Y%m%d-%H%M%S).tar.gz -C /data .
+	@docker run --rm -v ATHR360-logs:/logs -v $(shell pwd)/$(BACKUP_DIR):/backup alpine tar czf /backup/ATHR360-logs-$(shell date +%Y%m%d-%H%M%S).tar.gz -C /logs .
 	@echo "$(GREEN)Backup created in $(BACKUP_DIR)$(NC)"
 
 ## Security Commands

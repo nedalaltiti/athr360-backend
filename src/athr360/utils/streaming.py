@@ -21,10 +21,10 @@ async def sentence_chunks(
     *,
     min_len: int = 40,
     max_len: int = 150,
-    delay: float = 1.2,  # Slightly above 1 second for Microsoft Teams rate limiting
+    delay: float = 1.2,  # Slightly above 1 second for compliance rate limiting
 ) -> AsyncGenerator[str, None]:
     """
-    Yield chunks that respect Microsoft Teams streaming requirements:
+    Yield chunks that respect compliance streaming requirements:
     
     1. Meaningful chunk sizes (40-150 chars)
     2. Sentence-aware chunking when possible
@@ -35,7 +35,7 @@ async def sentence_chunks(
         text: The text to chunk
         min_len: Minimum chunk length before releasing
         max_len: Maximum chunk length (force release)
-        delay: Delay between chunks (Microsoft requires 1+ seconds)
+        delay: Delay between chunks (compliance requires 1+ seconds)
     """
     if not text.strip():
         return
@@ -89,7 +89,7 @@ async def word_chunks(
     delay: float = 1.2,
 ) -> AsyncGenerator[str, None]:
     """
-    Alternative word-based chunking for Microsoft Teams streaming.
+    Alternative word-based chunking for compliance streaming.
     
     Better for flowing text without specific formatting requirements.
     Preserves line breaks and formatting.

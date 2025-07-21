@@ -77,11 +77,13 @@ async def load_embeddings(instance: str):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Load embeddings for app instance")
+    parser = argparse.ArgumentParser(description="Load embeddings for compliance instance")
     parser.add_argument(
         "instance",
-        choices=["jordan", "us"],
-        help="App instance to load embeddings for"
+        choices=["compliance"],
+        default="compliance",
+        nargs="?",
+        help="App instance to load embeddings for (default: compliance)"
     )
     parser.add_argument(
         "--force",
@@ -91,18 +93,21 @@ def main():
     
     args = parser.parse_args()
     
+    # Always use compliance instance
+    instance = "compliance"
+    
     if args.force:
         # Set environment before importing
-        os.environ['APP_INSTANCE'] = args.instance
+        os.environ['APP_INSTANCE'] = instance
         
         from src.athr360.utils.di import get_vector_store
-        print(f"\n⚠️  Clearing existing embeddings for {args.instance}...")
+        print(f"\n⚠️  Clearing existing embeddings for {instance}...")
         vector_store = get_vector_store()
         asyncio.run(vector_store.clear())
         print("✅ Cleared existing embeddings")
     
     # Load embeddings
-    asyncio.run(load_embeddings(args.instance))
+    asyncio.run(load_embeddings(instance))
 
 
 if __name__ == "__main__":

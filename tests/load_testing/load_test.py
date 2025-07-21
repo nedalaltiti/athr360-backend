@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Load Testing Script for HR Bot with Streaming Support
+Load Testing Script for compliance Bot with Streaming Support
 
 Tests the application under different load scenarios:
 - 100 concurrent requests
@@ -51,13 +51,13 @@ class LoadTestSummary:
 
 
 class Athr360LoadTester:
-    """Load tester for HR Bot API with streaming support."""
+    """Load tester for compliance Bot API with streaming support."""
     
     def __init__(self, base_url: str = "http://localhost:3978"):
         self.base_url = base_url
         self.session: aiohttp.ClientSession = None
         
-        # Test payloads (realistic HR questions)
+        # Test payloads (realistic com questions)
         self.test_payloads = [
             {
                 "type": "message",
@@ -83,13 +83,6 @@ class Athr360LoadTester:
             {
                 "type": "message",
                 "text": "What are the working hours policy?",
-                "from": {"id": f"test-user-{{}}"},
-                "conversation": {"id": f"test-conv-{{}}"},
-                "serviceUrl": "https://test.service.url"
-            },
-            {
-                "type": "message",
-                "text": "NOI process information",
                 "from": {"id": f"test-user-{{}}"},
                 "conversation": {"id": f"test-conv-{{}}"},
                 "serviceUrl": "https://test.service.url"
@@ -361,7 +354,7 @@ async def run_full_load_test_suite(base_url: str, output_file: str = None):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="HR Bot Load Testing")
+    parser = argparse.ArgumentParser(description="Compliance Bot Load Testing")
     parser.add_argument("--url", default="http://localhost:3978", help="Base URL of the service")
     parser.add_argument("--output", help="Output file for detailed results")
     parser.add_argument("--requests", type=int, help="Run single test with N requests")

@@ -1,5 +1,5 @@
 """
-Error handling module for the HR bot application.
+Error handling module for the compliance bot application.
 
 This module provides a standardized approach to error handling across the application with:
 1. A hierarchical error structure for different domains
@@ -74,7 +74,7 @@ class ErrorCode(Enum):
 
 
 class BaseError(Exception):
-    """Base error class for all HR bot exceptions."""
+    """Base error class for all compliance bot exceptions."""
     
     def __init__(
         self,
